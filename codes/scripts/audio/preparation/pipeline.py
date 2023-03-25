@@ -3,10 +3,10 @@ import os
 import shutil
 from subprocess import Popen
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', type=str, help='Path to search for files')
-    parser.add_argument('--output_path', type=str, help='Path for output files')
+    parser.add_argument("--path", type=str, help="Path to search for files")
+    parser.add_argument("--output_path", type=str, help="Path for output files")
     args = parser.parse_args()
 
     cmds = [

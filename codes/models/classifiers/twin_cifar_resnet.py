@@ -17,37 +17,54 @@ from trainer.networks import register_model
 
 
 class BasicBlock(nn.Module):
-    """Basic Block for resnet 18 and resnet 34
+    """Basic Block for resnet 18 and resnet 34"""
 
-    """
-
-    #BasicBlock and BottleNeck block
-    #have different output size
-    #we use class attribute expansion
-    #to distinct
+    # BasicBlock and BottleNeck block
+    # have different output size
+    # we use class attribute expansion
+    # to distinct
     expansion = 1
 
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
 
-        #residual function
+        # residual function
         self.residual_function = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                bias=False,
+            ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels * BasicBlock.expansion, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels * BasicBlock.expansion)
+            nn.Conv2d(
+                out_channels,
+                out_channels * BasicBlock.expansion,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(out_channels * BasicBlock.expansion),
         )
 
-        #shortcut
+        # shortcut
         self.shortcut = nn.Sequential()
 
-        #the shortcut output dimension is not the same with residual function
-        #use 1*1 convolution to match the dimension
+        # the shortcut output dimension is not the same with residual function
+        # use 1*1 convolution to match the dimension
         if stride != 1 or in_channels != BasicBlock.expansion * out_channels:
             self.shortcut = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels * BasicBlock.expansion, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_channels * BasicBlock.expansion)
+                nn.Conv2d(
+                    in_channels,
+                    out_channels * BasicBlock.expansion,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(out_channels * BasicBlock.expansion),
             )
 
     def forward(self, x):
@@ -55,20 +72,32 @@ class BasicBlock(nn.Module):
 
 
 class BottleNeck(nn.Module):
-    """Residual block for resnet over 50 layers
+    """Residual block for resnet over 50 layers"""
 
-    """
     expansion = 4
+
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         self.residual_function = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, stride=stride, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(
+                out_channels,
+                out_channels,
+                stride=stride,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels * BottleNeck.expansion, kernel_size=1, bias=False),
+            nn.Conv2d(
+                out_channels,
+                out_channels * BottleNeck.expansion,
+                kernel_size=1,
+                bias=False,
+            ),
             nn.BatchNorm2d(out_channels * BottleNeck.expansion),
         )
 
@@ -76,8 +105,14 @@ class BottleNeck(nn.Module):
 
         if stride != 1 or in_channels != out_channels * BottleNeck.expansion:
             self.shortcut = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels * BottleNeck.expansion, stride=stride, kernel_size=1, bias=False),
-                nn.BatchNorm2d(out_channels * BottleNeck.expansion)
+                nn.Conv2d(
+                    in_channels,
+                    out_channels * BottleNeck.expansion,
+                    stride=stride,
+                    kernel_size=1,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(out_channels * BottleNeck.expansion),
             )
 
     def forward(self, x):
@@ -85,7 +120,6 @@ class BottleNeck(nn.Module):
 
 
 class ResNet(nn.Module):
-
     def __init__(self, block, num_block, num_classes=100):
         super().__init__()
 
@@ -94,9 +128,10 @@ class ResNet(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True))
-        #we use a different inputsize than the original paper
-        #so conv2_x's stride is 1
+            nn.ReLU(inplace=True),
+        )
+        # we use a different inputsize than the original paper
+        # so conv2_x's stride is 1
         self.conv2_x = self._make_layer(block, 32, num_block[0], 1)
         self.conv3_x = self._make_layer(block, 64, num_block[1], 2)
         self.conv4_x = self._make_layer(block, 128, num_block[2], 2)
@@ -143,7 +178,12 @@ class ResNet(nn.Module):
 
 
 class SymbolicLoss:
-    def __init__(self, category_depths=[3,5,5,3], convergence_weighting=[1,.6,.3,.1], divergence_weighting=[.1,.3,.6,1]):
+    def __init__(
+        self,
+        category_depths=[3, 5, 5, 3],
+        convergence_weighting=[1, 0.6, 0.3, 0.1],
+        divergence_weighting=[0.1, 0.3, 0.6, 1],
+    ):
         self.depths = category_depths
         self.total_classes = 1
         for c in category_depths:
@@ -166,16 +206,24 @@ class SymbolicLoss:
         :return: Convergence loss & divergence loss.
         """
         b, l = logits.shape
-        assert l == self.total_classes, f"Expected {self.total_classes} predictions, got {l}"
+        assert (
+            l == self.total_classes
+        ), f"Expected {self.total_classes} predictions, got {l}"
 
         convergence_loss = 0
         divergence_loss = 0
-        for epc, cw, dw in zip(self.elements_per_level, self.convergence_weighting, self.divergence_weighting):
-            level_logits = logits.view(b, l//epc, epc)
+        for epc, cw, dw in zip(
+            self.elements_per_level,
+            self.convergence_weighting,
+            self.divergence_weighting,
+        ):
+            level_logits = logits.view(b, l // epc, epc)
             level_logits = level_logits.sum(dim=-1)
-            level_labels = collaboratorLabels.div(epc, rounding_mode='trunc')
+            level_labels = collaboratorLabels.div(epc, rounding_mode="trunc")
             # Convergence
-            convergence_loss = convergence_loss + F.cross_entropy(level_logits, level_labels) * cw
+            convergence_loss = (
+                convergence_loss + F.cross_entropy(level_logits, level_labels) * cw
+            )
             # Divergence
             div_label_indices = level_logits.argmax(dim=-1)
             # TODO: find the torch-y way of doing this.
@@ -188,7 +236,7 @@ class SymbolicLoss:
         return convergence_loss, divergence_loss
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sl = SymbolicLoss()
     logits = torch.randn(5, sl.total_classes)
     labels = torch.randint(0, sl.total_classes, (5,))
@@ -199,42 +247,43 @@ class TwinnedCifar(nn.Module):
     def __init__(self):
         super().__init__()
         self.loss = SymbolicLoss()
-        self.netA = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes)
-        self.netB = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes)
+        self.netA = ResNet(
+            BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes
+        )
+        self.netB = ResNet(
+            BasicBlock, [2, 2, 2, 2], num_classes=self.loss.total_classes
+        )
 
     def forward(self, x):
         y1 = self.netA(x)
         y2 = self.netB(x)
         b = x.shape[0]
-        convergenceA, divergenceA = self.loss(y1[:b//2], y2.argmax(dim=-1)[:b//2])
-        convergenceB, divergenceB = self.loss(y2[b//2:], y1.argmax(dim=-1)[b//2:])
+        convergenceA, divergenceA = self.loss(y1[: b // 2], y2.argmax(dim=-1)[: b // 2])
+        convergenceB, divergenceB = self.loss(y2[b // 2 :], y1.argmax(dim=-1)[b // 2 :])
         return convergenceA + convergenceB, divergenceA + divergenceB
 
 
 @register_model
 def register_twin_cifar(opt_net, opt):
-    """ return a ResNet 18 object
-    """
+    """return a ResNet 18 object"""
     return TwinnedCifar()
 
+
 def resnet34():
-    """ return a ResNet 34 object
-    """
+    """return a ResNet 34 object"""
     return ResNet(BasicBlock, [3, 4, 6, 3])
 
+
 def resnet50():
-    """ return a ResNet 50 object
-    """
+    """return a ResNet 50 object"""
     return ResNet(BottleNeck, [3, 4, 6, 3])
 
+
 def resnet101():
-    """ return a ResNet 101 object
-    """
+    """return a ResNet 101 object"""
     return ResNet(BottleNeck, [3, 4, 23, 3])
 
+
 def resnet152():
-    """ return a ResNet 152 object
-    """
+    """return a ResNet 152 object"""
     return ResNet(BottleNeck, [3, 8, 36, 3])
-
-

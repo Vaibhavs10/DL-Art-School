@@ -4,9 +4,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import TimestepEmbedSequential, \
-    Downsample, Upsample, TimestepBlock
+from models.diffusion.nn import (
+    timestep_embedding,
+    normalization,
+    zero_module,
+    conv_nd,
+    linear,
+)
+from models.diffusion.unet_diffusion import (
+    TimestepEmbedSequential,
+    Downsample,
+    Upsample,
+    TimestepBlock,
+)
 from scripts.audio.gen.use_diffuse_tts import ceil_multiple
 from trainer.networks import register_model
 from utils.util import checkpoint, print_network
@@ -56,14 +66,22 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+                conv_nd(
+                    dims,
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size,
+                    padding=padding,
+                )
             ),
         )
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, eff_kernel, padding=eff_padding)
+            self.skip_connection = conv_nd(
+                dims, channels, self.out_channels, eff_kernel, padding=eff_padding
+            )
 
     def forward(self, x, emb):
         """
@@ -73,9 +91,7 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, x, emb
-        )
+        return checkpoint(self._forward, x, emb)
 
     def _forward(self, x, emb):
         h = self.in_layers(x)
@@ -110,10 +126,12 @@ class StackedResidualBlock(TimestepBlock):
         for i in range(5):
             out_channels = channels if i == 4 else gc
             self.add_module(
-                f'conv{i + 1}',
-                nn.Conv1d(channels + i * gc, out_channels, 3, 1, 1))
+                f"conv{i + 1}", nn.Conv1d(channels + i * gc, out_channels, 3, 1, 1)
+            )
             if i != 4:
-                self.add_module(f'gn{i+1}', nn.GroupNorm(num_groups=8, num_channels=out_channels))
+                self.add_module(
+                    f"gn{i+1}", nn.GroupNorm(num_groups=8, num_channels=out_channels)
+                )
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         zero_module(self.conv5)
         self.drop = nn.Dropout(p=dropout)
@@ -153,21 +171,21 @@ class DiffusionWaveformGen(nn.Module):
     """
 
     def __init__(
-            self,
-            model_channels=512,
-            in_channels=64,
-            in_mel_channels=256,
-            conditioning_dim_factor=2,
-            out_channels=128,  # mean and variance
-            dropout=0,
-            channel_mult=  (1,1.5,2),
-            num_res_blocks=(1,1,0),
-            token_conditioning_resolutions=(1,4),
-            mid_resnet_depth=10,
-            use_fp16=False,
-            time_embed_dim_multiplier=1,
-            # Parameters for regularization.
-            unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
+        self,
+        model_channels=512,
+        in_channels=64,
+        in_mel_channels=256,
+        conditioning_dim_factor=2,
+        out_channels=128,  # mean and variance
+        dropout=0,
+        channel_mult=(1, 1.5, 2),
+        num_res_blocks=(1, 1, 0),
+        token_conditioning_resolutions=(1, 4),
+        mid_resnet_depth=10,
+        use_fp16=False,
+        time_embed_dim_multiplier=1,
+        # Parameters for regularization.
+        unconditioned_percentage=0.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
         super().__init__()
 
@@ -178,7 +196,7 @@ class DiffusionWaveformGen(nn.Module):
         self.channel_mult = channel_mult
         self.unconditioned_percentage = unconditioned_percentage
         self.enable_fp16 = use_fp16
-        self.alignment_size = 2 ** (len(channel_mult)+1)
+        self.alignment_size = 2 ** (len(channel_mult) + 1)
         self.in_mel_channels = in_mel_channels
 
         time_embed_dim = model_channels * time_embed_dim_multiplier
@@ -194,7 +212,7 @@ class DiffusionWaveformGen(nn.Module):
         # complex to generate tokens, while generating latents will normally mean propagating through a deep autoregressive
         # transformer network.
         self.mel_converter = nn.Conv1d(in_mel_channels, conditioning_dim, 3, padding=1)
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,conditioning_dim,1))
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1, conditioning_dim, 1))
 
         self.input_blocks = nn.ModuleList(
             [
@@ -212,7 +230,7 @@ class DiffusionWaveformGen(nn.Module):
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in token_conditioning_resolutions:
                 token_conditioning_block = nn.Conv1d(conditioning_dim, ch, 1)
-                token_conditioning_block.weight.data *= .02
+                token_conditioning_block.weight.data *= 0.02
                 self.input_blocks.append(token_conditioning_block)
                 token_conditioning_blocks.append(token_conditioning_block)
 
@@ -237,7 +255,13 @@ class DiffusionWaveformGen(nn.Module):
                 self.input_blocks.append(
                     TimestepEmbedSequential(
                         Downsample(
-                            ch, True, dims=1, out_channels=out_ch, factor=2, ksize=3, pad=1
+                            ch,
+                            True,
+                            dims=1,
+                            out_channels=out_ch,
+                            factor=2,
+                            ksize=3,
+                            pad=1,
                         )
                     )
                 )
@@ -246,12 +270,19 @@ class DiffusionWaveformGen(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        self.middle_block = TimestepEmbedSequential(nn.Conv1d(ch+conditioning_dim, ch, kernel_size=1),
-                                                    *[StackedResidualBlock(ch, time_embed_dim, dropout) for _ in range(mid_resnet_depth)])
+        self.middle_block = TimestepEmbedSequential(
+            nn.Conv1d(ch + conditioning_dim, ch, kernel_size=1),
+            *[
+                StackedResidualBlock(ch, time_embed_dim, dropout)
+                for _ in range(mid_resnet_depth)
+            ],
+        )
         self._feature_size += ch
 
         self.output_blocks = nn.ModuleList([])
-        for level, (mult, num_blocks) in list(enumerate(zip(channel_mult, num_res_blocks)))[::-1]:
+        for level, (mult, num_blocks) in list(
+            enumerate(zip(channel_mult, num_res_blocks))
+        )[::-1]:
             for i in range(num_blocks + 1):
                 ich = input_block_chans.pop()
                 layers = [
@@ -283,9 +314,9 @@ class DiffusionWaveformGen(nn.Module):
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'input_blocks': list(self.input_blocks.parameters()),
-            'output_blocks': list(self.output_blocks.parameters()),
-            'middle_rrdb': list(self.middle_block.parameters()),
+            "input_blocks": list(self.input_blocks.parameters()),
+            "output_blocks": list(self.output_blocks.parameters()),
+            "middle_rrdb": list(self.middle_block.parameters()),
         }
         return groups
 
@@ -296,9 +327,11 @@ class DiffusionWaveformGen(nn.Module):
         """
         cm = ceil_multiple(x.shape[-1], self.alignment_size)
         if cm != 0:
-            pc = (cm-x.shape[-1])/x.shape[-1]
-            x = F.pad(x, (0,cm-x.shape[-1]))
-            aligned_conditioning = F.pad(aligned_conditioning, (0,int(pc*aligned_conditioning.shape[-1])))
+            pc = (cm - x.shape[-1]) / x.shape[-1]
+            x = F.pad(x, (0, cm - x.shape[-1]))
+            aligned_conditioning = F.pad(
+                aligned_conditioning, (0, int(pc * aligned_conditioning.shape[-1]))
+            )
         return x, aligned_conditioning
 
     def forward(self, x, timesteps, codes, conditioning_free=False):
@@ -315,7 +348,6 @@ class DiffusionWaveformGen(nn.Module):
         orig_x_shape = x.shape[-1]
         x, codes = self.fix_alignment(x, codes)
 
-
         hs = []
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
@@ -329,12 +361,16 @@ class DiffusionWaveformGen(nn.Module):
         h = x
         for k, module in enumerate(self.input_blocks):
             if isinstance(module, nn.Conv1d):
-                h_tok = F.interpolate(module(code_emb), size=(h.shape[-1]), mode='nearest')
+                h_tok = F.interpolate(
+                    module(code_emb), size=(h.shape[-1]), mode="nearest"
+                )
                 h = h + h_tok
             else:
                 h = module(h, time_emb)
                 hs.append(h)
-        h = torch.cat([h, F.interpolate(code_emb, size=(h.shape[-1]), mode='nearest')], dim=1)
+        h = torch.cat(
+            [h, F.interpolate(code_emb, size=(h.shape[-1]), mode="nearest")], dim=1
+        )
         h = self.middle_block(h, time_emb)
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
@@ -354,18 +390,26 @@ class DiffusionWaveformGen(nn.Module):
 
 @register_model
 def register_unet_diffusion_waveform_gen3(opt_net, opt):
-    return DiffusionWaveformGen(**opt_net['kwargs'])
+    return DiffusionWaveformGen(**opt_net["kwargs"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     clip = torch.randn(2, 4, 880)
-    aligned_sequence = torch.randn(2,256,220)
+    aligned_sequence = torch.randn(2, 256, 220)
     ts = torch.LongTensor([600, 600])
-    model = DiffusionWaveformGen(in_channels=4, out_channels=8, model_channels=64, in_mel_channels=256,
-                                 channel_mult=[1,2,4,6,8,16], num_res_blocks=[2,2,2,1,1,0], mid_resnet_depth=24,
-                                 conditioning_dim_factor=8,
-                                 token_conditioning_resolutions=[4,16], dropout=.1, time_embed_dim_multiplier=4)
+    model = DiffusionWaveformGen(
+        in_channels=4,
+        out_channels=8,
+        model_channels=64,
+        in_mel_channels=256,
+        channel_mult=[1, 2, 4, 6, 8, 16],
+        num_res_blocks=[2, 2, 2, 1, 1, 0],
+        mid_resnet_depth=24,
+        conditioning_dim_factor=8,
+        token_conditioning_resolutions=[4, 16],
+        dropout=0.1,
+        time_embed_dim_multiplier=4,
+    )
     # Test with sequence aligned conditioning
     o = model(clip, ts, aligned_sequence)
     print_network(model)
-

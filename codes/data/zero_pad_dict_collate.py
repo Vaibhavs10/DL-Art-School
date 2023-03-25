@@ -2,17 +2,23 @@ import torch
 import torch.nn.functional as F
 
 
-class ZeroPadDictCollate():
+class ZeroPadDictCollate:
     """
     Given a list of dictionary outputs with torch.Tensors from a Dataset, iterates through each one, finds the longest
     tensor, and zero pads all the other tensors together.
     """
+
     def collate_tensors(self, batch, key):
         result = []
         largest_dims = [0 for _ in range(len(batch[0][key].shape))]
         for elem in batch:
             result.append(elem[key])
-            largest_dims = [max(current_largest, new_consideration) for current_largest, new_consideration in zip(largest_dims, elem[key].shape)]
+            largest_dims = [
+                max(current_largest, new_consideration)
+                for current_largest, new_consideration in zip(
+                    largest_dims, elem[key].shape
+                )
+            ]
         # Now pad each tensor by the largest dimension.
         for i in range(len(result)):
             padding_tuple = ()
@@ -23,7 +29,6 @@ class ZeroPadDictCollate():
             result[i] = F.pad(result[i], padding_tuple)
 
         return torch.stack(result, dim=0)
-
 
     def collate_into_list(self, batch, key):
         result = []

@@ -33,14 +33,23 @@ class GANLoss(nn.Module):
         self.real_label_val = real_label_val
         self.fake_label_val = fake_label_val
 
-        if self.gan_type in ['gan', 'ragan', 'pixgan', 'pixgan_fea', 'crossgan', 'crossgan_lrref']:
+        if self.gan_type in [
+            "gan",
+            "ragan",
+            "pixgan",
+            "pixgan_fea",
+            "crossgan",
+            "crossgan_lrref",
+        ]:
             self.loss = nn.BCEWithLogitsLoss()
-        elif self.gan_type == 'lsgan':
+        elif self.gan_type == "lsgan":
             self.loss = nn.MSELoss()
-        elif self.gan_type == 'max_spread':
+        elif self.gan_type == "max_spread":
             self.loss = ZeroSpreadLoss()
         else:
-            raise NotImplementedError('GAN type [{:s}] is not found'.format(self.gan_type))
+            raise NotImplementedError(
+                "GAN type [{:s}] is not found".format(self.gan_type)
+            )
 
     def get_target_label(self, input, target_is_real):
         if target_is_real:
@@ -49,7 +58,12 @@ class GANLoss(nn.Module):
             return torch.empty_like(input).fill_(self.fake_label_val)
 
     def forward(self, input, target_is_real):
-        if self.gan_type in ['pixgan', 'pixgan_fea', 'crossgan', 'crossgan_lrref'] and not isinstance(target_is_real, bool):
+        if self.gan_type in [
+            "pixgan",
+            "pixgan_fea",
+            "crossgan",
+            "crossgan_lrref",
+        ] and not isinstance(target_is_real, bool):
             target_label = target_is_real
         else:
             target_label = self.get_target_label(input, target_is_real)

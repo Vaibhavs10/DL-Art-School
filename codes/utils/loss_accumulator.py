@@ -14,19 +14,23 @@ class LossAccumulator:
         if name not in self.buffers.keys():
             if "_histogram" in name:
                 tensor = torch.flatten(tensor.detach().cpu())
-                self.buffers[name] = (0, torch.zeros((self.buffer_sz, tensor.shape[0])), False)
+                self.buffers[name] = (
+                    0,
+                    torch.zeros((self.buffer_sz, tensor.shape[0])),
+                    False,
+                )
             else:
                 self.buffers[name] = (0, torch.zeros(self.buffer_sz), False)
         i, buf, filled = self.buffers[name]
         # Can take tensors or just plain python numbers.
-        if '_histogram' in name:
+        if "_histogram" in name:
             buf[i] = torch.flatten(tensor.detach().cpu())
         elif isinstance(tensor, torch.Tensor):
             buf[i] = tensor.detach().cpu()
         else:
             buf[i] = tensor
-        filled = i+1 >= self.buffer_sz or filled
-        self.buffers[name] = ((i+1) % self.buffer_sz, buf, filled)
+        filled = i + 1 >= self.buffer_sz or filled
+        self.buffers[name] = ((i + 1) % self.buffer_sz, buf, filled)
 
     def increment_metric(self, name):
         if name not in self.counters.keys():
@@ -38,7 +42,7 @@ class LossAccumulator:
         result = {}
         for k, v in self.buffers.items():
             i, buf, filled = v
-            if '_histogram' in k:
+            if "_histogram" in k:
                 result["loss_" + k] = torch.flatten(buf)
             if filled:
                 result["loss_" + k] = torch.mean(buf)
@@ -63,7 +67,7 @@ class InfStorageLossAccumulator:
                 self.buffers[name] = []
         buf = self.buffers[name]
         # Can take tensors or just plain python numbers.
-        if '_histogram' in name:
+        if "_histogram" in name:
             buf.append(torch.flatten(tensor.detach().cpu()))
         elif isinstance(tensor, torch.Tensor):
             buf.append(tensor.detach().cpu())
@@ -76,9 +80,9 @@ class InfStorageLossAccumulator:
     def as_dict(self):
         result = {}
         for k, buf in self.buffers.items():
-            if isinstance(buf[0],int) and 0 == buf[0]:
+            if isinstance(buf[0], int) and 0 == buf[0]:
                 buf[0] = torch.tensor(0, dtype=torch.float32)
-            if '_histogram' in k:
+            if "_histogram" in k:
                 result["loss_" + k] = torch.flatten(buf)
             else:
                 result["loss_" + k] = torch.mean(torch.stack(buf))

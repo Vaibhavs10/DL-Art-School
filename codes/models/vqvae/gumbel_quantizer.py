@@ -14,7 +14,7 @@ class GumbelQuantizer(nn.Module):
         # nn.Embedding
         self.codebook = mbnb.nn.Embedding(num_tokens, codebook_dim)
         self.straight_through = straight_through
-        self.temperature_scheduler = LinearDecayWeightScheduler(10, 5000, .9, 2000)
+        self.temperature_scheduler = LinearDecayWeightScheduler(10, 5000, 0.9, 2000)
         self.step = 0
         self.norm = SwitchNorm(num_tokens)
 
@@ -33,26 +33,34 @@ class GumbelQuantizer(nn.Module):
 
         if hard:
             index = y_soft.max(dim, keepdim=True)[1]
-            y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+            y_hard = torch.zeros_like(
+                logits, memory_format=torch.legacy_contiguous_format
+            ).scatter_(dim, index, 1.0)
             ret = y_hard - y_soft.detach() + y_soft
         else:
             ret = y_soft
         return ret
 
     def forward(self, h):
-        h = h.permute(0,2,1)
+        h = h.permute(0, 2, 1)
         logits = self.to_logits(h)
-        logits = self.gumbel_softmax(logits, tau=self.temperature_scheduler.get_weight_for_step(self.step), dim=1, hard=self.straight_through)
+        logits = self.gumbel_softmax(
+            logits,
+            tau=self.temperature_scheduler.get_weight_for_step(self.step),
+            dim=1,
+            hard=self.straight_through,
+        )
         logits = self.norm(logits)
         codes = logits.argmax(dim=1).flatten(1)
-        sampled = einsum('b n l, n d -> b d l', logits, self.codebook.weight)
-        return sampled.permute(0,2,1), 0, codes
+        sampled = einsum("b n l, n d -> b d l", logits, self.codebook.weight)
+        return sampled.permute(0, 2, 1), 0, codes
 
-if __name__ == '__main__':
-    j =  torch.randn(8,40,1024)
+
+if __name__ == "__main__":
+    j = torch.randn(8, 40, 1024)
     m = GumbelQuantizer(1024, 1024, 4096)
     m2 = DiscreteDecoder(1024, (512, 256), 2)
-    l=m2(m(j)[0].permute(0,2,1))
+    l = m2(m(j)[0].permute(0, 2, 1))
     mean = 0
     for ls in l:
         mean = mean + ls.mean()

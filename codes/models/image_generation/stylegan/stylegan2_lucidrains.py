@@ -27,7 +27,7 @@ try:
 except:
     APEX_AVAILABLE = False
 
-assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
+assert torch.cuda.is_available(), "You need to have an Nvidia GPU with CUDA installed."
 import maybe_bnb as mbnb
 
 num_cores = multiprocessing.cpu_count()
@@ -40,30 +40,43 @@ CALC_FID_NUM_IMAGES = 12800
 
 # helper classes
 
+
 def DiffAugment(x, types=[]):
     for p in types:
         for f in AUGMENT_FNS[p]:
             x = f(x)
     return x.contiguous()
 
+
 def rand_brightness(x):
     x = x + (torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device) - 0.5)
     return x
 
+
 def rand_saturation(x):
     x_mean = x.mean(dim=1, keepdim=True)
-    x = (x - x_mean) * (torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device) * 2) + x_mean
+    x = (x - x_mean) * (
+        torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device) * 2
+    ) + x_mean
     return x
+
 
 def rand_contrast(x):
     x_mean = x.mean(dim=[1, 2, 3], keepdim=True)
-    x = (x - x_mean) * (torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device) + 0.5) + x_mean
+    x = (x - x_mean) * (
+        torch.rand(x.size(0), 1, 1, 1, dtype=x.dtype, device=x.device) + 0.5
+    ) + x_mean
     return x
+
 
 def rand_translation(x, ratio=0.125):
     shift_x, shift_y = int(x.size(2) * ratio + 0.5), int(x.size(3) * ratio + 0.5)
-    translation_x = torch.randint(-shift_x, shift_x + 1, size=[x.size(0), 1, 1], device=x.device)
-    translation_y = torch.randint(-shift_y, shift_y + 1, size=[x.size(0), 1, 1], device=x.device)
+    translation_x = torch.randint(
+        -shift_x, shift_x + 1, size=[x.size(0), 1, 1], device=x.device
+    )
+    translation_y = torch.randint(
+        -shift_y, shift_y + 1, size=[x.size(0), 1, 1], device=x.device
+    )
     grid_batch, grid_x, grid_y = torch.meshgrid(
         torch.arange(x.size(0), dtype=torch.long, device=x.device),
         torch.arange(x.size(2), dtype=torch.long, device=x.device),
@@ -72,36 +85,51 @@ def rand_translation(x, ratio=0.125):
     grid_x = torch.clamp(grid_x + translation_x + 1, 0, x.size(2) + 1)
     grid_y = torch.clamp(grid_y + translation_y + 1, 0, x.size(3) + 1)
     x_pad = F.pad(x, [1, 1, 1, 1, 0, 0, 0, 0])
-    x = x_pad.permute(0, 2, 3, 1).contiguous()[grid_batch, grid_x, grid_y].permute(0, 3, 1, 2)
+    x = (
+        x_pad.permute(0, 2, 3, 1)
+        .contiguous()[grid_batch, grid_x, grid_y]
+        .permute(0, 3, 1, 2)
+    )
     return x
+
 
 def rand_cutout(x, ratio=0.5):
     cutout_size = int(x.size(2) * ratio + 0.5), int(x.size(3) * ratio + 0.5)
-    offset_x = torch.randint(0, x.size(2) + (1 - cutout_size[0] % 2), size=[x.size(0), 1, 1], device=x.device)
-    offset_y = torch.randint(0, x.size(3) + (1 - cutout_size[1] % 2), size=[x.size(0), 1, 1], device=x.device)
+    offset_x = torch.randint(
+        0, x.size(2) + (1 - cutout_size[0] % 2), size=[x.size(0), 1, 1], device=x.device
+    )
+    offset_y = torch.randint(
+        0, x.size(3) + (1 - cutout_size[1] % 2), size=[x.size(0), 1, 1], device=x.device
+    )
     grid_batch, grid_x, grid_y = torch.meshgrid(
         torch.arange(x.size(0), dtype=torch.long, device=x.device),
         torch.arange(cutout_size[0], dtype=torch.long, device=x.device),
         torch.arange(cutout_size[1], dtype=torch.long, device=x.device),
     )
-    grid_x = torch.clamp(grid_x + offset_x - cutout_size[0] // 2, min=0, max=x.size(2) - 1)
-    grid_y = torch.clamp(grid_y + offset_y - cutout_size[1] // 2, min=0, max=x.size(3) - 1)
+    grid_x = torch.clamp(
+        grid_x + offset_x - cutout_size[0] // 2, min=0, max=x.size(2) - 1
+    )
+    grid_y = torch.clamp(
+        grid_y + offset_y - cutout_size[1] // 2, min=0, max=x.size(3) - 1
+    )
     mask = torch.ones(x.size(0), x.size(2), x.size(3), dtype=x.dtype, device=x.device)
     mask[grid_batch, grid_x, grid_y] = 0
     x = x * mask.unsqueeze(1)
     return x
 
+
 AUGMENT_FNS = {
-    'color': [rand_brightness, rand_saturation, rand_contrast],
-    'translation': [rand_translation],
-    'cutout': [rand_cutout],
+    "color": [rand_brightness, rand_saturation, rand_contrast],
+    "translation": [rand_translation],
+    "cutout": [rand_cutout],
 }
+
 
 class NanException(Exception):
     pass
 
 
-class EMA():
+class EMA:
     def __init__(self, beta):
         super().__init__()
         self.beta = beta
@@ -152,7 +180,7 @@ class Blur(nn.Module):
     def __init__(self):
         super().__init__()
         f = torch.Tensor([1, 2, 1])
-        self.register_buffer('f', f)
+        self.register_buffer("f", f)
 
     def forward(self, x):
         f = self.f
@@ -162,13 +190,24 @@ class Blur(nn.Module):
 
 # one layer of self-attention and feedforward, for images
 
-attn_and_ff = lambda chan: nn.Sequential(*[
-    Residual(Rezero(ImageLinearAttention(chan, norm_queries=True))),
-    Residual(Rezero(nn.Sequential(nn.Conv2d(chan, chan * 2, 1), leaky_relu(), nn.Conv2d(chan * 2, chan, 1))))
-])
+attn_and_ff = lambda chan: nn.Sequential(
+    *[
+        Residual(Rezero(ImageLinearAttention(chan, norm_queries=True))),
+        Residual(
+            Rezero(
+                nn.Sequential(
+                    nn.Conv2d(chan, chan * 2, 1),
+                    leaky_relu(),
+                    nn.Conv2d(chan * 2, chan, 1),
+                )
+            )
+        ),
+    ]
+)
 
 
 # helpers
+
 
 def exists(val):
     return val is not None
@@ -237,9 +276,14 @@ def loss_backwards(fp16, loss, optimizer, loss_id, **kwargs):
 
 def gradient_penalty(images, output, weight=10, return_structured_grads=False):
     batch_size = images.shape[0]
-    gradients = torch_grad(outputs=output, inputs=images,
-                           grad_outputs=torch.ones(output.size(), device=images.device),
-                           create_graph=True, retain_graph=True, only_inputs=True)[0]
+    gradients = torch_grad(
+        outputs=output,
+        inputs=images,
+        grad_outputs=torch.ones(output.size(), device=images.device),
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
 
     flat_grad = gradients.reshape(batch_size, -1)
     penalty = weight * ((flat_grad.norm(2, dim=1) - 1) ** 2).mean()
@@ -248,20 +292,26 @@ def gradient_penalty(images, output, weight=10, return_structured_grads=False):
     else:
         return penalty
 
+
 def calc_pl_lengths(styles, images):
     num_pixels = images.shape[2] * images.shape[3]
     pl_noise = torch.randn_like(images) / math.sqrt(num_pixels)
     outputs = (images * pl_noise).sum()
 
-    pl_grads = torch_grad(outputs=outputs, inputs=styles,
-                          grad_outputs=torch.ones_like(outputs),
-                          create_graph=True, retain_graph=True, only_inputs=True)[0]
+    pl_grads = torch_grad(
+        outputs=outputs,
+        inputs=styles,
+        grad_outputs=torch.ones_like(outputs),
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
 
-    return (pl_grads ** 2).sum(dim=2).mean(dim=1).sqrt()
+    return (pl_grads**2).sum(dim=2).mean(dim=1).sqrt()
 
 
 def image_noise(n, im_size, device):
-    return torch.FloatTensor(n, im_size, im_size, 1).uniform_(0., 1.).cuda(device)
+    return torch.FloatTensor(n, im_size, im_size, 1).uniform_(0.0, 1.0).cuda(device)
 
 
 def leaky_relu(p=0.2):
@@ -286,10 +336,14 @@ def slerp(val, low, high):
     high_norm = high / torch.norm(high, dim=1, keepdim=True)
     omega = torch.acos((low_norm * high_norm).sum(1))
     so = torch.sin(omega)
-    res = (torch.sin((1.0 - val) * omega) / so).unsqueeze(1) * low + (torch.sin(val * omega) / so).unsqueeze(1) * high
+    res = (torch.sin((1.0 - val) * omega) / so).unsqueeze(1) * low + (
+        torch.sin(val * omega) / so
+    ).unsqueeze(1) * high
     return res
 
+
 # augmentations
+
 
 def random_hflip(tensor, prob):
     if prob > random():
@@ -319,6 +373,7 @@ class StyleGan2Augmentor(nn.Module):
 
 
 # stylegan2 classes
+
 
 class EqualLinear(nn.Module):
     def __init__(self, in_dim, out_dim, lr_mul=1, bias=True):
@@ -357,10 +412,14 @@ class RGBBlock(nn.Module):
         out_filters = 3 if not rgba else 4
         self.conv = Conv2DMod(input_channel, out_filters, 1, demod=False)
 
-        self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-            Blur()
-        ) if upsample else None
+        self.upsample = (
+            nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                Blur(),
+            )
+            if upsample
+            else None
+        )
 
     def forward(self, x, prev_rgb, istyle):
         b, c, h, w = x.shape
@@ -380,8 +439,24 @@ class AdaptiveInstanceNorm(nn.Module):
     def __init__(self, in_channel, style_dim):
         super().__init__()
         from models.archs.arch_util import ConvGnLelu
-        self.style2scale = ConvGnLelu(style_dim, in_channel, kernel_size=1, norm=False, activation=False, bias=True)
-        self.style2bias = ConvGnLelu(style_dim, in_channel, kernel_size=1, norm=False, activation=False, bias=True, weight_init_factor=0)
+
+        self.style2scale = ConvGnLelu(
+            style_dim,
+            in_channel,
+            kernel_size=1,
+            norm=False,
+            activation=False,
+            bias=True,
+        )
+        self.style2bias = ConvGnLelu(
+            style_dim,
+            in_channel,
+            kernel_size=1,
+            norm=False,
+            activation=False,
+            bias=True,
+            weight_init_factor=0,
+        )
         self.norm = nn.InstanceNorm2d(in_channel)
 
     def forward(self, input, style):
@@ -406,7 +481,7 @@ class EqualLR:
         self.name = name
 
     def compute_weight(self, module):
-        weight = getattr(module, self.name + '_orig')
+        weight = getattr(module, self.name + "_orig")
         fan_in = weight.data.size(1) * weight.data[0][0].numel()
 
         return weight * math.sqrt(2 / fan_in)
@@ -417,7 +492,7 @@ class EqualLR:
 
         weight = getattr(module, name)
         del module._parameters[name]
-        module.register_parameter(name + '_orig', nn.Parameter(weight.data))
+        module.register_parameter(name + "_orig", nn.Parameter(weight.data))
         module.register_forward_pre_hook(fn)
 
         return fn
@@ -427,7 +502,7 @@ class EqualLR:
         setattr(module, self.name, weight)
 
 
-def equal_lr(module, name='weight'):
+def equal_lr(module, name="weight"):
     EqualLR.apply(module, name)
 
     return module
@@ -447,7 +522,9 @@ class EqualConv2d(nn.Module):
 
 
 class Conv2DMod(nn.Module):
-    def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, **kwargs):
+    def __init__(
+        self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, **kwargs
+    ):
         super().__init__()
         self.filters = out_chan
         self.demod = demod
@@ -455,7 +532,9 @@ class Conv2DMod(nn.Module):
         self.stride = stride
         self.dilation = dilation
         self.weight = nn.Parameter(torch.randn((out_chan, in_chan, kernel, kernel)))
-        nn.init.kaiming_normal_(self.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+        nn.init.kaiming_normal_(
+            self.weight, a=0, mode="fan_in", nonlinearity="leaky_relu"
+        )
 
     def _get_same_padding(self, size, kernel, dilation, stride):
         return ((size - 1) * (stride - 1) + dilation * (kernel - 1)) // 2
@@ -468,7 +547,7 @@ class Conv2DMod(nn.Module):
         weights = w2 * (w1 + 1)
 
         if self.demod:
-            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdim=True) + EPS)
+            d = torch.rsqrt((weights**2).sum(dim=(2, 3, 4), keepdim=True) + EPS)
             weights = weights * d
 
         x = x.reshape(1, -1, h, w)
@@ -484,9 +563,21 @@ class Conv2DMod(nn.Module):
 
 
 class GeneratorBlockWithStructure(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, rgba=False):
+    def __init__(
+        self,
+        latent_dim,
+        input_channels,
+        filters,
+        upsample=True,
+        upsample_rgb=True,
+        rgba=False,
+    ):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
+        self.upsample = (
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+            if upsample
+            else None
+        )
 
         # Uses stylegan1 style blocks for injecting structural latent.
         self.conv0 = EqualConv2d(input_channels, filters, 3, padding=1)
@@ -509,12 +600,14 @@ class GeneratorBlockWithStructure(nn.Module):
         if exists(self.upsample):
             x = self.upsample(x)
 
-        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        inoise = inoise[:, : x.shape[2], : x.shape[3], :]
         noise0 = self.to_noise0(inoise).permute((0, 3, 1, 2))
         noise1 = self.to_noise1(inoise).permute((0, 3, 1, 2))
         noise2 = self.to_noise2(inoise).permute((0, 3, 1, 2))
 
-        structure = torch.nn.functional.interpolate(structure_input, size=x.shape[2:], mode="nearest")
+        structure = torch.nn.functional.interpolate(
+            structure_input, size=x.shape[2:], mode="nearest"
+        )
         x = self.conv0(x)
         x = self.noise0(x, noise0)
         x = self.adain0(x, structure)
@@ -532,9 +625,22 @@ class GeneratorBlockWithStructure(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, rgba=False, structure_input=False):
+    def __init__(
+        self,
+        latent_dim,
+        input_channels,
+        filters,
+        upsample=True,
+        upsample_rgb=True,
+        rgba=False,
+        structure_input=False,
+    ):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
+        self.upsample = (
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+            if upsample
+            else None
+        )
 
         self.structure_input = structure_input
         if self.structure_input:
@@ -560,7 +666,7 @@ class GeneratorBlock(nn.Module):
             s = self.structure_conv(structure_input)
             x = torch.cat([x, s], dim=1)
 
-        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        inoise = inoise[:, : x.shape[2], : x.shape[3], :]
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
 
@@ -577,14 +683,25 @@ class GeneratorBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, image_size, latent_dim, network_capacity=16, transparent=False, attn_layers=[], no_const=False,
-                 fmap_max=512, structure_input=False):
+    def __init__(
+        self,
+        image_size,
+        latent_dim,
+        network_capacity=16,
+        transparent=False,
+        attn_layers=[],
+        no_const=False,
+        fmap_max=512,
+        structure_input=False,
+    ):
         super().__init__()
         self.image_size = image_size
         self.latent_dim = latent_dim
         self.num_layers = int(log2(image_size) - 1)
 
-        filters = [network_capacity * (2 ** (i + 1)) for i in range(self.num_layers)][::-1]
+        filters = [network_capacity * (2 ** (i + 1)) for i in range(self.num_layers)][
+            ::-1
+        ]
 
         set_fmap_max = partial(min, fmap_max)
         filters = list(map(set_fmap_max, filters))
@@ -595,7 +712,9 @@ class Generator(nn.Module):
         self.no_const = no_const
 
         if no_const:
-            self.to_initial_block = nn.ConvTranspose2d(latent_dim, init_channels, 4, 1, 0, bias=False)
+            self.to_initial_block = nn.ConvTranspose2d(
+                latent_dim, init_channels, 4, 1, 0, bias=False
+            )
         else:
             self.initial_block = nn.Parameter(torch.randn((1, init_channels, 4, 4)))
 
@@ -623,7 +742,7 @@ class Generator(nn.Module):
                 out_chan,
                 upsample=not_first,
                 upsample_rgb=not_last,
-                rgba=transparent
+                rgba=transparent,
             )
             self.blocks.append(block)
 
@@ -644,16 +763,22 @@ class Generator(nn.Module):
         x = self.initial_conv(x)
 
         if structure_input is not None:
-            s = torch.nn.functional.interpolate(structure_input, size=x.shape[2:], mode="nearest")
+            s = torch.nn.functional.interpolate(
+                structure_input, size=x.shape[2:], mode="nearest"
+            )
         for style, block, attn in zip(styles, self.blocks, self.attns):
             if exists(attn):
                 x = checkpoint(attn, x)
             if structure_input is not None:
                 if exists(block.upsample):
                     # In this case, the structural guidance is given by the extra information over the previous layer.
-                    twoX = (x.shape[2]*2, x.shape[3]*2)
-                    sn = torch.nn.functional.interpolate(structure_input, size=twoX, mode="nearest")
-                    s_int = torch.nn.functional.interpolate(s, size=twoX, mode="bilinear")
+                    twoX = (x.shape[2] * 2, x.shape[3] * 2)
+                    sn = torch.nn.functional.interpolate(
+                        structure_input, size=twoX, mode="nearest"
+                    )
+                    s_int = torch.nn.functional.interpolate(
+                        s, size=twoX, mode="bilinear"
+                    )
                     s_diff = sn - s_int
                 else:
                     # This is the initial case - just feed in the base structure.
@@ -667,13 +792,32 @@ class Generator(nn.Module):
 
 # Wrapper that combines style vectorizer with the actual generator.
 class StyleGan2GeneratorWithLatent(nn.Module):
-    def __init__(self, image_size, latent_dim=512, style_depth=8, lr_mlp=.1, network_capacity=16, transparent=False,
-                 attn_layers=[], no_const=False, fmap_max=512, structure_input=False):
+    def __init__(
+        self,
+        image_size,
+        latent_dim=512,
+        style_depth=8,
+        lr_mlp=0.1,
+        network_capacity=16,
+        transparent=False,
+        attn_layers=[],
+        no_const=False,
+        fmap_max=512,
+        structure_input=False,
+    ):
         super().__init__()
         self.vectorizer = StyleVectorizer(latent_dim, style_depth, lr_mul=lr_mlp)
-        self.gen = Generator(image_size, latent_dim, network_capacity, transparent, attn_layers, no_const, fmap_max,
-                             structure_input=structure_input)
-        self.mixed_prob = .9
+        self.gen = Generator(
+            image_size,
+            latent_dim,
+            network_capacity,
+            transparent,
+            attn_layers,
+            no_const,
+            fmap_max,
+            structure_input=structure_input,
+        )
+        self.mixed_prob = 0.9
         self._init_weights()
 
     def noise(self, n, latent_dim, device):
@@ -684,13 +828,17 @@ class StyleGan2GeneratorWithLatent(nn.Module):
 
     def mixed_list(self, n, layers, latent_dim, device):
         tt = int(torch.rand(()).numpy() * layers)
-        return self.noise_list(n, tt, latent_dim, device) + self.noise_list(n, layers - tt, latent_dim, device)
+        return self.noise_list(n, tt, latent_dim, device) + self.noise_list(
+            n, layers - tt, latent_dim, device
+        )
 
     def latent_to_w(self, style_vectorizer, latent_descr):
         return [(style_vectorizer(z), num_layers) for z, num_layers in latent_descr]
 
     def styles_def_to_tensor(self, styles_def):
-        return torch.cat([t[:, None, :].expand(-1, n, -1) for t, n in styles_def], dim=1)
+        return torch.cat(
+            [t[:, None, :].expand(-1, n, -1) for t, n in styles_def], dim=1
+        )
 
     # To use per the stylegan paper, input should be uniform noise. This gen takes it in as a normal "image" format:
     # b,f,h,w.
@@ -699,21 +847,25 @@ class StyleGan2GeneratorWithLatent(nn.Module):
 
         full_random_latents = True
         if full_random_latents:
-            style = self.noise(b*2, self.gen.latent_dim, x.device)
+            style = self.noise(b * 2, self.gen.latent_dim, x.device)
             w = self.vectorizer(style)
             # Randomly distribute styles across layers
-            w_styles = w[:,None,:].expand(-1, self.gen.num_layers, -1).clone()
+            w_styles = w[:, None, :].expand(-1, self.gen.num_layers, -1).clone()
             for j in range(b):
                 cutoff = int(torch.rand(()).numpy() * self.gen.num_layers)
                 if cutoff == self.gen.num_layers or random() > self.mixed_prob:
-                    w_styles[j] = w_styles[j*2]
+                    w_styles[j] = w_styles[j * 2]
                 else:
-                    w_styles[j, :cutoff] = w_styles[j*2, :cutoff]
-                    w_styles[j, cutoff:] = w_styles[j*2+1, cutoff:]
+                    w_styles[j, :cutoff] = w_styles[j * 2, :cutoff]
+                    w_styles[j, cutoff:] = w_styles[j * 2 + 1, cutoff:]
             w_styles = w_styles[:b]
         else:
-            get_latents_fn = self.mixed_list if random() < self.mixed_prob else self.noise_list
-            style = get_latents_fn(b, self.gen.num_layers, self.gen.latent_dim, device=x.device)
+            get_latents_fn = (
+                self.mixed_list if random() < self.mixed_prob else self.noise_list
+            )
+            style = get_latents_fn(
+                b, self.gen.num_layers, self.gen.latent_dim, device=x.device
+            )
             w_space = self.latent_to_w(self.vectorizer, style)
             w_styles = self.styles_def_to_tensor(w_space)
 
@@ -721,12 +873,22 @@ class StyleGan2GeneratorWithLatent(nn.Module):
         if fit_starting_shape_to_structure:
             starting_shape = (x.shape[2] // 32, x.shape[3] // 32)
         # The underlying model expects the noise as b,h,w,1. Make it so.
-        return self.gen(w_styles, x[:,0,:,:].unsqueeze(dim=3), structure_input, starting_shape), w_styles
+        return (
+            self.gen(
+                w_styles,
+                x[:, 0, :, :].unsqueeze(dim=3),
+                structure_input,
+                starting_shape,
+            ),
+            w_styles,
+        )
 
     def _init_weights(self):
         for m in self.modules():
-            if type(m) in {nn.Conv2d, mbnb.nn.Linear} and hasattr(m, 'weight'):
-                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+            if type(m) in {nn.Conv2d, mbnb.nn.Linear} and hasattr(m, "weight"):
+                nn.init.kaiming_normal_(
+                    m.weight, a=0, mode="fan_in", nonlinearity="leaky_relu"
+                )
 
         for block in self.gen.blocks:
             nn.init.zeros_(block.to_noise1.weight)
@@ -738,19 +900,22 @@ class StyleGan2GeneratorWithLatent(nn.Module):
 class DiscriminatorBlock(nn.Module):
     def __init__(self, input_channels, filters, downsample=True):
         super().__init__()
-        self.conv_res = nn.Conv2d(input_channels, filters, 1, stride=(2 if downsample else 1))
+        self.conv_res = nn.Conv2d(
+            input_channels, filters, 1, stride=(2 if downsample else 1)
+        )
 
         self.net = nn.Sequential(
             nn.Conv2d(input_channels, filters, 3, padding=1),
             leaky_relu(),
             nn.Conv2d(filters, filters, 3, padding=1),
-            leaky_relu()
+            leaky_relu(),
         )
 
-        self.downsample = nn.Sequential(
-            Blur(),
-            nn.Conv2d(filters, filters, 3, padding=1, stride=2)
-        ) if downsample else None
+        self.downsample = (
+            nn.Sequential(Blur(), nn.Conv2d(filters, filters, 3, padding=1, stride=2))
+            if downsample
+            else None
+        )
 
     def forward(self, x):
         res = self.conv_res(x)
@@ -762,13 +927,24 @@ class DiscriminatorBlock(nn.Module):
 
 
 class StyleGan2Discriminator(nn.Module):
-    def __init__(self, image_size, network_capacity=16, fq_layers=[], fq_dict_size=256, attn_layers=[],
-                 transparent=False, fmap_max=512, input_filters=3, quantize=False, do_checkpointing=False):
+    def __init__(
+        self,
+        image_size,
+        network_capacity=16,
+        fq_layers=[],
+        fq_dict_size=256,
+        attn_layers=[],
+        transparent=False,
+        fmap_max=512,
+        input_filters=3,
+        quantize=False,
+        do_checkpointing=False,
+    ):
         super().__init__()
         num_layers = int(log2(image_size) - 1)
 
         blocks = []
-        filters = [input_filters] + [(64) * (2 ** i) for i in range(num_layers + 1)]
+        filters = [input_filters] + [(64) * (2**i) for i in range(num_layers + 1)]
 
         set_fmap_max = partial(min, fmap_max)
         filters = list(map(set_fmap_max, filters))
@@ -790,7 +966,11 @@ class StyleGan2Discriminator(nn.Module):
             attn_blocks.append(attn_fn)
 
             if quantize:
-                quantize_fn = PermuteToFrom(VectorQuantize(out_chan, fq_dict_size)) if num_layer in fq_layers else None
+                quantize_fn = (
+                    PermuteToFrom(VectorQuantize(out_chan, fq_dict_size))
+                    if num_layer in fq_layers
+                    else None
+                )
                 quantize_blocks.append(quantize_fn)
             else:
                 quantize_blocks.append(None)
@@ -814,7 +994,9 @@ class StyleGan2Discriminator(nn.Module):
 
         quantize_loss = torch.zeros(1).to(x)
 
-        for (block, attn_block, q_block) in zip(self.blocks, self.attn_blocks, self.quantize_blocks):
+        for block, attn_block, q_block in zip(
+            self.blocks, self.attn_blocks, self.quantize_blocks
+        ):
             if self.do_checkpointing:
                 x = checkpoint(block, x)
             else:
@@ -838,19 +1020,23 @@ class StyleGan2Discriminator(nn.Module):
     def _init_weights(self):
         for m in self.modules():
             if type(m) in {nn.Conv2d, mbnb.nn.Linear}:
-                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.kaiming_normal_(
+                    m.weight, a=0, mode="fan_in", nonlinearity="leaky_relu"
+                )
 
 
 class StyleGan2DivergenceLoss(L.ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        self.real = opt['real']
-        self.fake = opt['fake']
-        self.discriminator = opt['discriminator']
-        self.for_gen = opt['gen_loss']
-        self.gp_frequency = opt['gradient_penalty_frequency']
-        self.noise = opt['noise'] if 'noise' in opt.keys() else 0
-        self.logistic = opt_get(opt, ['logistic'], False)  # Applies a logistic curve to the output logits, which is what the StyleGAN2 authors used.
+        self.real = opt["real"]
+        self.fake = opt["fake"]
+        self.discriminator = opt["discriminator"]
+        self.for_gen = opt["gen_loss"]
+        self.gp_frequency = opt["gradient_penalty_frequency"]
+        self.noise = opt["noise"] if "noise" in opt.keys() else 0
+        self.logistic = opt_get(
+            opt, ["logistic"], False
+        )  # Applies a logistic curve to the output logits, which is what the StyleGAN2 authors used.
 
     def forward(self, net, state):
         real_input = state[self.real]
@@ -859,7 +1045,7 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
             fake_input = fake_input + torch.rand_like(fake_input) * self.noise
             real_input = real_input + torch.rand_like(real_input) * self.noise
 
-        D = self.env['discriminators'][self.discriminator]
+        D = self.env["discriminators"][self.discriminator]
         fake = D(fake_input)
         if self.for_gen:
             if self.logistic:
@@ -877,7 +1063,7 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
                 divergence_loss = (F.relu(1 + real) + F.relu(1 - fake)).mean()
 
             # Apply gradient penalty. TODO: migrate this elsewhere.
-            if self.env['step'] % self.gp_frequency == 0:
+            if self.env["step"] % self.gp_frequency == 0:
                 gp = gradient_penalty(real_input, real)
                 self.metrics.append(("gradient_penalty", gp.clone().detach()))
                 divergence_loss = divergence_loss + gp
@@ -889,10 +1075,10 @@ class StyleGan2DivergenceLoss(L.ConfigurableLoss):
 class StyleGan2PathLengthLoss(L.ConfigurableLoss):
     def __init__(self, opt, env):
         super().__init__(opt, env)
-        self.w_styles = opt['w_styles']
-        self.gen = opt['gen']
+        self.w_styles = opt["w_styles"]
+        self.gen = opt["gen"]
         self.pl_mean = None
-        self.pl_length_ma = EMA(.99)
+        self.pl_length_ma = EMA(0.99)
 
     def forward(self, net, state):
         w_styles = state[self.w_styles]
@@ -913,17 +1099,30 @@ class StyleGan2PathLengthLoss(L.ConfigurableLoss):
 
 @register_model
 def register_stylegan2_lucidrains(opt_net, opt):
-    is_structured = opt_net['structured'] if 'structured' in opt_net.keys() else False
-    attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
-    return StyleGan2GeneratorWithLatent(image_size=opt_net['image_size'], latent_dim=opt_net['latent_dim'],
-                                        style_depth=opt_net['style_depth'], structure_input=is_structured,
-                                        attn_layers=attn)
+    is_structured = opt_net["structured"] if "structured" in opt_net.keys() else False
+    attn = opt_net["attn_layers"] if "attn_layers" in opt_net.keys() else []
+    return StyleGan2GeneratorWithLatent(
+        image_size=opt_net["image_size"],
+        latent_dim=opt_net["latent_dim"],
+        style_depth=opt_net["style_depth"],
+        structure_input=is_structured,
+        attn_layers=attn,
+    )
 
 
 @register_model
 def register_stylegan2_discriminator(opt_net, opt):
-    attn = opt_net['attn_layers'] if 'attn_layers' in opt_net.keys() else []
-    disc = StyleGan2Discriminator(image_size=opt_net['image_size'], input_filters=opt_net['in_nc'], attn_layers=attn,
-                                  do_checkpointing=opt_get(opt_net, ['do_checkpointing'], False),
-                                  quantize=opt_get(opt_net, ['quantize'], False))
-    return StyleGan2Augmentor(disc, opt_net['image_size'], types=opt_net['augmentation_types'], prob=opt_net['augmentation_probability'])
+    attn = opt_net["attn_layers"] if "attn_layers" in opt_net.keys() else []
+    disc = StyleGan2Discriminator(
+        image_size=opt_net["image_size"],
+        input_filters=opt_net["in_nc"],
+        attn_layers=attn,
+        do_checkpointing=opt_get(opt_net, ["do_checkpointing"], False),
+        quantize=opt_get(opt_net, ["quantize"], False),
+    )
+    return StyleGan2Augmentor(
+        disc,
+        opt_net["image_size"],
+        types=opt_net["augmentation_types"],
+        prob=opt_net["augmentation_probability"],
+    )

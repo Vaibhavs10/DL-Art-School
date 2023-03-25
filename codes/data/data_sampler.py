@@ -53,7 +53,7 @@ class DistIterSampler(Sampler):
         indices = [v % dsize for v in indices]
 
         # subsample
-        indices = indices[self.rank:self.total_size:self.num_replicas]
+        indices = indices[self.rank : self.total_size : self.num_replicas]
         assert len(indices) == self.num_samples
 
         return iter(indices)

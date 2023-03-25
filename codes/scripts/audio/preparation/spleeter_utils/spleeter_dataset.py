@@ -9,7 +9,16 @@ from data.util import find_audio_files
 
 
 class SpleeterDataset(Dataset):
-    def __init__(self, src_dir, batch_sz, max_duration, sample_rate=22050, partition=None, partition_size=None, resume=None):
+    def __init__(
+        self,
+        src_dir,
+        batch_sz,
+        max_duration,
+        sample_rate=22050,
+        partition=None,
+        partition_size=None,
+        resume=None,
+    ):
         self.batch_sz = batch_sz
         self.max_duration = max_duration
         self.files = find_audio_files(src_dir, include_nonwav=True)
@@ -19,7 +28,7 @@ class SpleeterDataset(Dataset):
         if partition_size is not None:
             psz = int(partition_size)
             prt = int(partition)
-            self.files = self.files[prt * psz:(prt + 1) * psz]
+            self.files = self.files[prt * psz : (prt + 1) * psz]
 
         # Find the resume point and carry on from there.
         if resume is not None:
@@ -39,11 +48,11 @@ class SpleeterDataset(Dataset):
         files = []
         ends = []
         for k in range(self.batch_sz):
-            ind = k+item
+            ind = k + item
             if ind >= len(self.files):
                 break
 
-            #try:
+            # try:
             wav, sr = self.loader.load(self.files[ind], sample_rate=self.sample_rate)
             assert sr == 22050
             # Get rid of all channels except one.
@@ -56,10 +65,6 @@ class SpleeterDataset(Dataset):
                 wavs = np.concatenate([wavs, wav])
             ends.append(wavs.shape[0])
             files.append(self.files[ind])
-            #except:
+            # except:
             #    print(f'Error loading {self.files[ind]}')
-        return {
-            'audio': wavs,
-            'files': files,
-            'ends': ends
-        }
+        return {"audio": wavs, "files": files, "ends": ends}

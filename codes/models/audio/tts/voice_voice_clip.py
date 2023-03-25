@@ -16,8 +16,8 @@ def exists(val):
 
 
 def masked_mean(t, mask, dim=1):
-    t = t.masked_fill(~mask[:, :, None], 0.)
-    return t.sum(dim = 1) / mask.sum(dim = 1)[..., None]
+    t = t.masked_fill(~mask[:, :, None], 0.0)
+    return t.sum(dim=1) / mask.sum(dim=1)[..., None]
 
 
 class VoiceCLIP(nn.Module):
@@ -26,35 +26,36 @@ class VoiceCLIP(nn.Module):
     """
 
     def __init__(
-            self,
-            encoder_output=512,
-            dim_latent=512,
-            speech_max_seq_len=250,
-            mel_compression_ratio=256,
-            pretrained_encoder_dict_path=None
+        self,
+        encoder_output=512,
+        dim_latent=512,
+        speech_max_seq_len=250,
+        mel_compression_ratio=256,
+        pretrained_encoder_dict_path=None,
     ):
         super().__init__()
         self.encoder = AudioMiniEncoder(80, encoder_output)
         if pretrained_encoder_dict_path is not None:
             self.encoder.load_state_dict(torch.load(pretrained_encoder_dict_path))
         self.to_latent = mbnb.nn.Linear(encoder_output, dim_latent, bias=False)
-        self.temperature = nn.Parameter(torch.tensor(1.))
+        self.temperature = nn.Parameter(torch.tensor(1.0))
         self.mel_compression_ratio = mel_compression_ratio
 
-    def forward(
-        self,
-        speech_mels,
-        speech_lengths,
-        return_loss=True
-    ):
-        half_length = min(speech_mels.shape[-1], torch.min(speech_lengths).item() // self.mel_compression_ratio) // 2
+    def forward(self, speech_mels, speech_lengths, return_loss=True):
+        half_length = (
+            min(
+                speech_mels.shape[-1],
+                torch.min(speech_lengths).item() // self.mel_compression_ratio,
+            )
+            // 2
+        )
 
         # Extract two speech MELs from the same clip, apply some random noise to them and also apply specaugment to them.
         first_half = speech_mels[:, :, :half_length]
-        first_half = first_half + torch.rand_like(first_half) * .00001
+        first_half = first_half + torch.rand_like(first_half) * 0.00001
         first_half = spec_augment(first_half)
-        second_half = speech_mels[:, :, half_length:half_length*2]
-        second_half = second_half + torch.rand_like(second_half) * .00001
+        second_half = speech_mels[:, :, half_length : half_length * 2]
+        second_half = second_half + torch.rand_like(second_half) * 0.00001
         second_half = spec_augment(second_half)
 
         # Introduce a random gap between the two clips.
@@ -66,12 +67,12 @@ class VoiceCLIP(nn.Module):
 
         # The clips must be multiples of 4.
         if first_half.shape[-1] % 4 != 0:
-            first_half = first_half[:, :, :first_half.shape[-1] // 4 * 4]
+            first_half = first_half[:, :, : first_half.shape[-1] // 4 * 4]
         if second_half.shape[-1] % 4 != 0:
-            second_half = second_half[:, :, :second_half.shape[-1] // 4 * 4]
+            second_half = second_half[:, :, : second_half.shape[-1] // 4 * 4]
 
         # Flip the clips randomly
-        if random.random() < .5:
+        if random.random() < 0.5:
             t = first_half
             first_half = second_half
             second_half = t
@@ -81,15 +82,17 @@ class VoiceCLIP(nn.Module):
         second_emb = self.encoder(second_half)
         second_latents = self.to_latent(second_emb)
 
-        first_latents, second_latents = map(lambda t: F.normalize(t, p=2, dim=-1), (first_latents, second_latents))
+        first_latents, second_latents = map(
+            lambda t: F.normalize(t, p=2, dim=-1), (first_latents, second_latents)
+        )
 
         temp = self.temperature.exp()
 
         if not return_loss:
-            sim = einsum('n d, n d -> n', first_latents, second_latents) * temp
+            sim = einsum("n d, n d -> n", first_latents, second_latents) * temp
             return sim
 
-        sim = einsum('i d, j d -> i j', first_latents, second_latents) * temp
+        sim = einsum("i d, j d -> i j", first_latents, second_latents) * temp
         labels = torch.arange(first_latents.shape[0], device=first_latents.device)
         loss = (F.cross_entropy(sim, labels) + F.cross_entropy(sim.t(), labels)) / 2
         return loss
@@ -99,18 +102,20 @@ class VoiceCLIP(nn.Module):
         latent = self.to_latent(emb)
         latent = F.normalize(latent, p=2, dim=-1)
         temp = self.temperature.exp()
-        sim = einsum('i d, j d -> i j', latent, latent) * temp
+        sim = einsum("i d, j d -> i j", latent, latent) * temp
         return sim
 
 
 @register_model
 def register_voice_to_voice_clip(opt_net, opt):
-    return VoiceCLIP(**opt_get(opt_net, ['kwargs'], {}))
+    return VoiceCLIP(**opt_get(opt_net, ["kwargs"], {}))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     clip = VoiceCLIP()
     for k in range(1000):
-        clip(torch.randn((2,80,156)),
-             torch.randint(130*1024,156*1024,(2,)),
-             return_loss=True)
+        clip(
+            torch.randn((2, 80, 156)),
+            torch.randint(130 * 1024, 156 * 1024, (2,)),
+            return_loss=True,
+        )

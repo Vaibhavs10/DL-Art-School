@@ -38,8 +38,10 @@ def recursively_find_audio_directories(root):
 def process_subdir(subdir, options, clip_sz):
     global clip_model
     if clip_model is None:
-        print('Loading CLIP model..')
-        clip_model = load_model_from_config(preloaded_options=options, model_name='clip', also_load_savepoint=True).cuda()
+        print("Loading CLIP model..")
+        clip_model = load_model_from_config(
+            preloaded_options=options, model_name="clip", also_load_savepoint=True
+        ).cuda()
         clip_model.eval()
 
     with torch.no_grad():
@@ -47,11 +49,11 @@ def process_subdir(subdir, options, clip_sz):
         if len(paths) == 0:
             return
         root = str(root)
-        output_file = os.path.join(root, 'similarities.pth')
+        output_file = os.path.join(root, "similarities.pth")
         if os.path.exists(output_file):
-            print(f'{root} already processed. Skipping.')
+            print(f"{root} already processed. Skipping.")
             return
-        print(f'Processing {root}..')
+        print(f"Processing {root}..")
 
         clips = []
         for path in paths:
@@ -76,7 +78,7 @@ def process_subdir(subdir, options, clip_sz):
                 sims = outp
             else:
                 if outp.shape[-1] != 256:
-                    outp = F.pad(outp, (0,256-outp.shape[-1]))
+                    outp = F.pad(outp, (0, 256 - outp.shape[-1]))
                 sims = torch.cat([sims, outp], dim=0)
 
         simmap = {}
@@ -90,28 +92,47 @@ def process_subdir(subdir, options, clip_sz):
             if n == 1:
                 simpaths.append(rel)
             else:
-                for i in range(1,n):  # The first entry is always the file itself.
+                for i in range(1, n):  # The first entry is always the file itself.
                     top_ind = top3.indices[i]
-                    simpaths.append(str(os.path.relpath(paths[top_ind], root)).replace('\\', '/'))
+                    simpaths.append(
+                        str(os.path.relpath(paths[top_ind], root)).replace("\\", "/")
+                    )
             simmap[rel] = simpaths
         torch.save(simmap, output_file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """
     This script iterates within a directory filled with subdirs. Each subdir contains a list of audio files from the same
     source. The script uses an speech-to-speech clip model to find the <n> most similar audio clips within each subdir for
-    each clip within that subdir. These similar files are recorded in a "similarities.pth" file in each subdirectory, which 
+    each clip within that subdir. These similar files are recorded in a "similarities.pth" file in each subdirectory, which
     is consumed during training when the dataset searches for conditioning clips.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', type=str, help='Path to the options YAML file used to train the CLIP model', default='../options/train_voice_voice_clip.yml')
-    parser.add_argument('--num_workers', type=int, help='Number concurrent processes to use', default=4)
-    parser.add_argument('--path', type=str, help='Root path to search for audio directories from', default='Y:\\clips\\for_finetuning\\mlp\\good')
-    parser.add_argument('--clip_size', type=int, help='Amount of audio samples to pull from each file', default=22050)
+    parser.add_argument(
+        "-o",
+        type=str,
+        help="Path to the options YAML file used to train the CLIP model",
+        default="../options/train_voice_voice_clip.yml",
+    )
+    parser.add_argument(
+        "--num_workers", type=int, help="Number concurrent processes to use", default=4
+    )
+    parser.add_argument(
+        "--path",
+        type=str,
+        help="Root path to search for audio directories from",
+        default="Y:\\clips\\for_finetuning\\mlp\\good",
+    )
+    parser.add_argument(
+        "--clip_size",
+        type=int,
+        help="Amount of audio samples to pull from each file",
+        default=22050,
+    )
     args = parser.parse_args()
 
-    with open(args.o, mode='r') as f:
+    with open(args.o, mode="r") as f:
         opt = yaml.load(f, Loader=Loader)
 
     print("Finding applicable files..")
@@ -124,5 +145,3 @@ if __name__ == '__main__':
     else:
         for subdir in tqdm(all_files):
             fn(subdir)
-
-

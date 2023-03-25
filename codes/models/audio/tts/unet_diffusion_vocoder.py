@@ -1,7 +1,19 @@
 from models.diffusion.fp16_util import convert_module_to_f32, convert_module_to_f16
-from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionPool2d, AttentionBlock, ResBlock, TimestepEmbedSequential, \
-    Downsample, Upsample
+from models.diffusion.nn import (
+    timestep_embedding,
+    normalization,
+    zero_module,
+    conv_nd,
+    linear,
+)
+from models.diffusion.unet_diffusion import (
+    AttentionPool2d,
+    AttentionBlock,
+    ResBlock,
+    TimestepEmbedSequential,
+    Downsample,
+    Upsample,
+)
 import torch
 import torch.nn as nn
 
@@ -40,28 +52,28 @@ class DiffusionVocoder(nn.Module):
     """
 
     def __init__(
-            self,
-            model_channels,
-            num_res_blocks,
-            in_channels=1,
-            out_channels=2,  # mean and variance
-            spectrogram_channels=80,
-            spectrogram_conditioning_level=3,  # Level at which spectrogram conditioning is applied to the waveform.
-            dropout=0,
-            # 106496 -> 26624 -> 6656 -> 16664 -> 416 -> 104 -> 26  for ~5secs@22050Hz
-            channel_mult=(1, 2, 4, 8, 16, 32, 64),
-            attention_resolutions=(16,32,64),
-            conv_resample=True,
-            dims=1,
-            num_classes=None,
-            use_fp16=False,
-            num_heads=1,
-            num_head_channels=-1,
-            num_heads_upsample=-1,
-            use_scale_shift_norm=False,
-            resblock_updown=False,
-            use_new_attention_order=False,
-            kernel_size=5,
+        self,
+        model_channels,
+        num_res_blocks,
+        in_channels=1,
+        out_channels=2,  # mean and variance
+        spectrogram_channels=80,
+        spectrogram_conditioning_level=3,  # Level at which spectrogram conditioning is applied to the waveform.
+        dropout=0,
+        # 106496 -> 26624 -> 6656 -> 16664 -> 416 -> 104 -> 26  for ~5secs@22050Hz
+        channel_mult=(1, 2, 4, 8, 16, 32, 64),
+        attention_resolutions=(16, 32, 64),
+        conv_resample=True,
+        dims=1,
+        num_classes=None,
+        use_fp16=False,
+        num_heads=1,
+        num_head_channels=-1,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=False,
+        resblock_updown=False,
+        use_new_attention_order=False,
+        kernel_size=5,
     ):
         super().__init__()
 
@@ -95,7 +107,9 @@ class DiffusionVocoder(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, kernel_size, padding=padding)
+                    conv_nd(
+                        dims, in_channels, model_channels, kernel_size, padding=padding
+                    )
                 )
             ]
         )
@@ -109,17 +123,19 @@ class DiffusionVocoder(nn.Module):
             conv_nd(dims, self.spectrogram_channels, spec_chs, 1),
             normalization(spec_chs),
             nn.SiLU(),
-            conv_nd(dims, spec_chs, spec_chs, 1)
+            conv_nd(dims, spec_chs, spec_chs, 1),
         )
         self.convergence_conv = nn.Sequential(
-            normalization(spec_chs*2),
+            normalization(spec_chs * 2),
             nn.SiLU(),
-            conv_nd(dims, spec_chs*2, spec_chs*2, 1)
+            conv_nd(dims, spec_chs * 2, spec_chs * 2, 1),
         )
 
         for level, mult in enumerate(channel_mult):
-            if level == spectrogram_conditioning_level+1:
-                ch *= 2  # At this level, the spectrogram is concatenated onto the input.
+            if level == spectrogram_conditioning_level + 1:
+                ch *= (
+                    2  # At this level, the spectrogram is concatenated onto the input.
+                )
 
             for _ in range(num_res_blocks):
                 layers = [
@@ -171,7 +187,7 @@ class DiffusionVocoder(nn.Module):
                 ds *= 2
                 self._feature_size += ch
             if level == spectrogram_conditioning_level:
-                self.input_block_injection_point = len(self.input_blocks)-1
+                self.input_block_injection_point = len(self.input_blocks) - 1
                 input_block_chans[-1] *= 2
 
         self.middle_block = TimestepEmbedSequential(
@@ -248,7 +264,11 @@ class DiffusionVocoder(nn.Module):
         self.out = nn.Sequential(
             normalization(ch),
             nn.SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
+            zero_module(
+                conv_nd(
+                    dims, model_channels, out_channels, kernel_size, padding=padding
+                )
+            ),
         )
 
     def convert_to_fp16(self):
@@ -276,7 +296,9 @@ class DiffusionVocoder(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert x.shape[-1] % 4096 == 0  # This model operates at base//4096 at it's bottom levels, thus this requirement.
+        assert (
+            x.shape[-1] % 4096 == 0
+        )  # This model operates at base//4096 at it's bottom levels, thus this requirement.
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         conditioning = self.spectrogram_conditioner(spectrogram)
@@ -285,7 +307,9 @@ class DiffusionVocoder(nn.Module):
         for k, module in enumerate(self.input_blocks):
             h = module(h, emb)
             if k == self.input_block_injection_point:
-                cond = nn.functional.interpolate(conditioning, size=h.shape[-self.dims:], mode='nearest')
+                cond = nn.functional.interpolate(
+                    conditioning, size=h.shape[-self.dims :], mode="nearest"
+                )
                 h = torch.cat([h, cond], dim=1)
                 h = self.convergence_conv(h)
             hs.append(h)
@@ -299,11 +323,11 @@ class DiffusionVocoder(nn.Module):
 
 @register_model
 def register_unet_diffusion_vocoder(opt_net, opt):
-    return DiffusionVocoder(**opt_net['kwargs'])
+    return DiffusionVocoder(**opt_net["kwargs"])
 
 
 # Test for ~4 second audio clip at 22050Hz
-if __name__ == '__main__':
+if __name__ == "__main__":
     clip = torch.randn(1, 1, 81920)
     spec = torch.randn(1, 80, 416)
     ts = torch.LongTensor([555])

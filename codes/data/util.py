@@ -15,7 +15,20 @@ import cv2
 ####################
 
 ###################### get image path list ######################
-IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PPM', '.bmp', '.BMP', '.webp', '.WEBP']
+IMG_EXTENSIONS = [
+    ".jpg",
+    ".JPG",
+    ".jpeg",
+    ".JPEG",
+    ".png",
+    ".PNG",
+    ".ppm",
+    ".PPM",
+    ".bmp",
+    ".BMP",
+    ".webp",
+    ".WEBP",
+]
 
 
 def torch2cv(tensor):
@@ -41,21 +54,21 @@ def is_image_file(filename):
 
 
 def is_wav_file(filename):
-    return filename.endswith('.wav')
+    return filename.endswith(".wav")
 
 
 def is_audio_file(filename):
-    AUDIO_EXTENSIONS = ['.wav', '.mp3', '.wma', '.m4b', '.flac', '.aac']
+    AUDIO_EXTENSIONS = [".wav", ".mp3", ".wma", ".m4b", ".flac", ".aac"]
     return any(filename.endswith(extension) for extension in AUDIO_EXTENSIONS)
 
 
 def _get_paths_from_images(path, qualifier=is_image_file):
     """get image path list from image folder"""
-    assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
+    assert os.path.isdir(path), "{:s} is not a valid directory".format(path)
     images = []
     for dirpath, _, fnames in sorted(os.walk(path)):
         for fname in sorted(fnames):
-            if qualifier(fname) and 'ref.jpg' not in fname:
+            if qualifier(fname) and "ref.jpg" not in fname:
                 img_path = os.path.join(dirpath, fname)
                 images.append(img_path)
     if not images:
@@ -65,9 +78,9 @@ def _get_paths_from_images(path, qualifier=is_image_file):
 
 def _get_paths_from_lmdb(dataroot):
     """get image path list from lmdb meta info"""
-    meta_info = pickle.load(open(os.path.join(dataroot, 'meta_info.pkl'), 'rb'))
-    paths = meta_info['keys']
-    sizes = meta_info['resolution']
+    meta_info = pickle.load(open(os.path.join(dataroot, "meta_info.pkl"), "rb"))
+    paths = meta_info["keys"]
+    sizes = meta_info["resolution"]
     if len(sizes) == 1:
         sizes = sizes * len(paths)
     return paths, sizes
@@ -101,7 +114,7 @@ def find_files_of_type(data_type, dataroot, weights=[], qualifier=is_image_file)
 
 
 def glob_file_list(root):
-    return sorted(glob.glob(os.path.join(root, '*')))
+    return sorted(glob.glob(os.path.join(root, "*")))
 
 
 ###################### read images ######################
@@ -109,7 +122,7 @@ def _read_img_lmdb(env, key, size):
     """read image from lmdb with key (w/ and w/o fixed size)
     size: (C, H, W) tuple"""
     with env.begin(write=False) as txn:
-        buf = txn.get(key.encode('ascii'))
+        buf = txn.get(key.encode("ascii"))
     img_flat = np.frombuffer(buf, dtype=np.uint8)
     C, H, W = size
     img = img_flat.reshape(H, W, C)
@@ -124,16 +137,16 @@ def read_img(env, path, size=None, rgb=False):
         stream = open(path, "rb")
         bytes = bytearray(stream.read())
         img = cv2.imdecode(np.asarray(bytes, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-    elif env == 'lmdb':
+    elif env == "lmdb":
         img = _read_img_lmdb(env, path, size)
-    elif env == 'buffer':
+    elif env == "buffer":
         img = cv2.imdecode(path, cv2.IMREAD_UNCHANGED)
     else:
         raise NotImplementedError("Unsupported env: %s" % (env,))
 
     if img is None:
         print("Image error: %s" % (path,))
-    img = img.astype(np.float32) / 255.
+    img = img.astype(np.float32) / 255.0
     if img.ndim == 2:
         img = np.expand_dims(img, axis=2)
     # some images have 4 channels
@@ -156,16 +169,18 @@ def read_img_seq(path):
     if type(path) is list:
         img_path_l = path
     else:
-        img_path_l = sorted(glob.glob(os.path.join(path, '*')))
+        img_path_l = sorted(glob.glob(os.path.join(path, "*")))
     img_l = [read_img(None, v) for v in img_path_l]
     # stack to Torch tensor
     imgs = np.stack(img_l, axis=0)
     imgs = imgs[:, :, :, [2, 1, 0]]
-    imgs = torch.from_numpy(np.ascontiguousarray(np.transpose(imgs, (0, 3, 1, 2)))).float()
+    imgs = torch.from_numpy(
+        np.ascontiguousarray(np.transpose(imgs, (0, 3, 1, 2)))
+    ).float()
     return imgs
 
 
-def index_generation(crt_i, max_n, N, padding='reflection'):
+def index_generation(crt_i, max_n, N, padding="reflection"):
     """Generate an index list for reading N frames from a sequence of images
     Args:
         crt_i (int): current center index
@@ -187,27 +202,27 @@ def index_generation(crt_i, max_n, N, padding='reflection'):
 
     for i in range(crt_i - n_pad, crt_i + n_pad + 1):
         if i < 0:
-            if padding == 'replicate':
+            if padding == "replicate":
                 add_idx = 0
-            elif padding == 'reflection':
+            elif padding == "reflection":
                 add_idx = -i
-            elif padding == 'new_info':
+            elif padding == "new_info":
                 add_idx = (crt_i + n_pad) + (-i)
-            elif padding == 'circle':
+            elif padding == "circle":
                 add_idx = N + i
             else:
-                raise ValueError('Wrong padding mode')
+                raise ValueError("Wrong padding mode")
         elif i > max_n:
-            if padding == 'replicate':
+            if padding == "replicate":
                 add_idx = max_n
-            elif padding == 'reflection':
+            elif padding == "reflection":
                 add_idx = max_n * 2 - i
-            elif padding == 'new_info':
+            elif padding == "new_info":
                 add_idx = (crt_i - n_pad) - (i - max_n)
-            elif padding == 'circle':
+            elif padding == "circle":
                 add_idx = i - N
             else:
-                raise ValueError('Wrong padding mode')
+                raise ValueError("Wrong padding mode")
         else:
             add_idx = i
         return_l.append(add_idx)
@@ -273,13 +288,13 @@ def augment_flow(img_list, flow_list, hflip=True, rot=True):
 
 def channel_convert(in_c, tar_type, img_list):
     """conversion among BGR, gray and y"""
-    if in_c == 3 and tar_type == 'gray':  # BGR to gray
+    if in_c == 3 and tar_type == "gray":  # BGR to gray
         gray_list = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in img_list]
         return [np.expand_dims(img, axis=2) for img in gray_list]
-    elif in_c == 3 and tar_type == 'y':  # BGR to y
+    elif in_c == 3 and tar_type == "y":  # BGR to y
         y_list = [bgr2ycbcr(img, only_y=True) for img in img_list]
         return [np.expand_dims(img, axis=2) for img in y_list]
-    elif in_c == 1 and tar_type == 'RGB':  # gray/y to BGR
+    elif in_c == 1 and tar_type == "RGB":  # gray/y to BGR
         return [cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) for img in img_list]
     else:
         return img_list
@@ -295,17 +310,23 @@ def rgb2ycbcr(img, only_y=True):
     in_img_type = img.dtype
     img.astype(np.float32)
     if in_img_type != np.uint8:
-        img *= 255.
+        img *= 255.0
     # convert
     if only_y:
         rlt = np.dot(img, [65.481, 128.553, 24.966]) / 255.0 + 16.0
     else:
-        rlt = np.matmul(img, [[65.481, -37.797, 112.0], [128.553, -74.203, -93.786],
-                              [24.966, 112.0, -18.214]]) / 255.0 + [16, 128, 128]
+        rlt = np.matmul(
+            img,
+            [
+                [65.481, -37.797, 112.0],
+                [128.553, -74.203, -93.786],
+                [24.966, 112.0, -18.214],
+            ],
+        ) / 255.0 + [16, 128, 128]
     if in_img_type == np.uint8:
         rlt = rlt.round()
     else:
-        rlt /= 255.
+        rlt /= 255.0
     return rlt.astype(in_img_type)
 
 
@@ -319,17 +340,23 @@ def bgr2ycbcr(img, only_y=True):
     in_img_type = img.dtype
     img.astype(np.float32)
     if in_img_type != np.uint8:
-        img *= 255.
+        img *= 255.0
     # convert
     if only_y:
         rlt = np.dot(img, [24.966, 128.553, 65.481]) / 255.0 + 16.0
     else:
-        rlt = np.matmul(img, [[24.966, 112.0, -18.214], [128.553, -74.203, -93.786],
-                              [65.481, -37.797, 112.0]]) / 255.0 + [16, 128, 128]
+        rlt = np.matmul(
+            img,
+            [
+                [24.966, 112.0, -18.214],
+                [128.553, -74.203, -93.786],
+                [65.481, -37.797, 112.0],
+            ],
+        ) / 255.0 + [16, 128, 128]
     if in_img_type == np.uint8:
         rlt = rlt.round()
     else:
-        rlt /= 255.
+        rlt /= 255.0
     return rlt.astype(in_img_type)
 
 
@@ -342,14 +369,20 @@ def ycbcr2rgb(img):
     in_img_type = img.dtype
     img.astype(np.float32)
     if in_img_type != np.uint8:
-        img *= 255.
+        img *= 255.0
     # convert
-    rlt = np.matmul(img, [[0.00456621, 0.00456621, 0.00456621], [0, -0.00153632, 0.00791071],
-                          [0.00625893, -0.00318811, 0]]) * 255.0 + [-222.921, 135.576, -276.836]
+    rlt = np.matmul(
+        img,
+        [
+            [0.00456621, 0.00456621, 0.00456621],
+            [0, -0.00153632, 0.00791071],
+            [0.00625893, -0.00318811, 0],
+        ],
+    ) * 255.0 + [-222.921, 135.576, -276.836]
     if in_img_type == np.uint8:
         rlt = rlt.round()
     else:
-        rlt /= 255.
+        rlt /= 255.0
     return rlt.astype(in_img_type)
 
 
@@ -359,13 +392,13 @@ def modcrop(img_in, scale):
     if img.ndim == 2:
         H, W = img.shape
         H_r, W_r = H % scale, W % scale
-        img = img[:H - H_r, :W - W_r]
+        img = img[: H - H_r, : W - W_r]
     elif img.ndim == 3:
         H, W, C = img.shape
         H_r, W_r = H % scale, W % scale
-        img = img[:H - H_r, :W - W_r, :]
+        img = img[: H - H_r, : W - W_r, :]
     else:
-        raise ValueError('Wrong img ndim: [{:d}].'.format(img.ndim))
+        raise ValueError("Wrong img ndim: [{:d}].".format(img.ndim))
     return img
 
 
@@ -379,12 +412,14 @@ def cubic(x):
     absx = torch.abs(x)
     absx2 = absx**2
     absx3 = absx**3
-    return (1.5 * absx3 - 2.5 * absx2 + 1) * (
-        (absx <= 1).type_as(absx)) + (-0.5 * absx3 + 2.5 * absx2 - 4 * absx + 2) * ((
-            (absx > 1) * (absx <= 2)).type_as(absx))
+    return (1.5 * absx3 - 2.5 * absx2 + 1) * ((absx <= 1).type_as(absx)) + (
+        -0.5 * absx3 + 2.5 * absx2 - 4 * absx + 2
+    ) * (((absx > 1) * (absx <= 2)).type_as(absx))
 
 
-def calculate_weights_indices(in_length, out_length, scale, kernel, kernel_width, antialiasing):
+def calculate_weights_indices(
+    in_length, out_length, scale, kernel, kernel_width, antialiasing
+):
     if (scale < 1) and (antialiasing):
         # Use a modified kernel to simultaneously interpolate and antialias- larger kernel width
         kernel_width = kernel_width / scale
@@ -408,8 +443,9 @@ def calculate_weights_indices(in_length, out_length, scale, kernel, kernel_width
 
     # The indices of the input pixels involved in computing the k-th output
     # pixel are in row k of the indices matrix.
-    indices = left.view(out_length, 1).expand(out_length, P) + torch.linspace(0, P - 1, P).view(
-        1, P).expand(out_length, P)
+    indices = left.view(out_length, 1).expand(out_length, P) + torch.linspace(
+        0, P - 1, P
+    ).view(1, P).expand(out_length, P)
 
     # The weights used to compute the k-th output pixel are in row k of the
     # weights matrix.
@@ -447,7 +483,7 @@ def imresize(img, scale, antialiasing=True):
     in_C, in_H, in_W = img.size()
     _, out_H, out_W = in_C, math.ceil(in_H * scale), math.ceil(in_W * scale)
     kernel_width = 4
-    kernel = 'cubic'
+    kernel = "cubic"
 
     # Return the desired dimension order for performing the resize.  The
     # strategy is to perform the resize first along the dimension with the
@@ -456,9 +492,11 @@ def imresize(img, scale, antialiasing=True):
 
     # get weights and indices
     weights_H, indices_H, sym_len_Hs, sym_len_He = calculate_weights_indices(
-        in_H, out_H, scale, kernel, kernel_width, antialiasing)
+        in_H, out_H, scale, kernel, kernel_width, antialiasing
+    )
     weights_W, indices_W, sym_len_Ws, sym_len_We = calculate_weights_indices(
-        in_W, out_W, scale, kernel, kernel_width, antialiasing)
+        in_W, out_W, scale, kernel, kernel_width, antialiasing
+    )
     # process H dimension
     # symmetric copying
     img_aug = torch.FloatTensor(in_C, in_H + sym_len_Hs + sym_len_He, in_W)
@@ -478,9 +516,15 @@ def imresize(img, scale, antialiasing=True):
     kernel_width = weights_H.size(1)
     for i in range(out_H):
         idx = int(indices_H[i][0])
-        out_1[0, i, :] = img_aug[0, idx:idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
-        out_1[1, i, :] = img_aug[1, idx:idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
-        out_1[2, i, :] = img_aug[2, idx:idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
+        out_1[0, i, :] = (
+            img_aug[0, idx : idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
+        )
+        out_1[1, i, :] = (
+            img_aug[1, idx : idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
+        )
+        out_1[2, i, :] = (
+            img_aug[2, idx : idx + kernel_width, :].transpose(0, 1).mv(weights_H[i])
+        )
 
     # process W dimension
     # symmetric copying
@@ -501,9 +545,9 @@ def imresize(img, scale, antialiasing=True):
     kernel_width = weights_W.size(1)
     for i in range(out_W):
         idx = int(indices_W[i][0])
-        out_2[0, :, i] = out_1_aug[0, :, idx:idx + kernel_width].mv(weights_W[i])
-        out_2[1, :, i] = out_1_aug[1, :, idx:idx + kernel_width].mv(weights_W[i])
-        out_2[2, :, i] = out_1_aug[2, :, idx:idx + kernel_width].mv(weights_W[i])
+        out_2[0, :, i] = out_1_aug[0, :, idx : idx + kernel_width].mv(weights_W[i])
+        out_2[1, :, i] = out_1_aug[1, :, idx : idx + kernel_width].mv(weights_W[i])
+        out_2[2, :, i] = out_1_aug[2, :, idx : idx + kernel_width].mv(weights_W[i])
 
     return out_2
 
@@ -517,7 +561,7 @@ def imresize_np(img, scale, antialiasing=True):
     in_H, in_W, in_C = img.size()
     _, out_H, out_W = in_C, math.ceil(in_H * scale), math.ceil(in_W * scale)
     kernel_width = 4
-    kernel = 'cubic'
+    kernel = "cubic"
 
     # Return the desired dimension order for performing the resize.  The
     # strategy is to perform the resize first along the dimension with the
@@ -526,9 +570,11 @@ def imresize_np(img, scale, antialiasing=True):
 
     # get weights and indices
     weights_H, indices_H, sym_len_Hs, sym_len_He = calculate_weights_indices(
-        in_H, out_H, scale, kernel, kernel_width, antialiasing)
+        in_H, out_H, scale, kernel, kernel_width, antialiasing
+    )
     weights_W, indices_W, sym_len_Ws, sym_len_We = calculate_weights_indices(
-        in_W, out_W, scale, kernel, kernel_width, antialiasing)
+        in_W, out_W, scale, kernel, kernel_width, antialiasing
+    )
     # process H dimension
     # symmetric copying
     img_aug = torch.FloatTensor(in_H + sym_len_Hs + sym_len_He, in_W, in_C)
@@ -548,9 +594,15 @@ def imresize_np(img, scale, antialiasing=True):
     kernel_width = weights_H.size(1)
     for i in range(out_H):
         idx = int(indices_H[i][0])
-        out_1[i, :, 0] = img_aug[idx:idx + kernel_width, :, 0].transpose(0, 1).mv(weights_H[i])
-        out_1[i, :, 1] = img_aug[idx:idx + kernel_width, :, 1].transpose(0, 1).mv(weights_H[i])
-        out_1[i, :, 2] = img_aug[idx:idx + kernel_width, :, 2].transpose(0, 1).mv(weights_H[i])
+        out_1[i, :, 0] = (
+            img_aug[idx : idx + kernel_width, :, 0].transpose(0, 1).mv(weights_H[i])
+        )
+        out_1[i, :, 1] = (
+            img_aug[idx : idx + kernel_width, :, 1].transpose(0, 1).mv(weights_H[i])
+        )
+        out_1[i, :, 2] = (
+            img_aug[idx : idx + kernel_width, :, 2].transpose(0, 1).mv(weights_H[i])
+        )
 
     # process W dimension
     # symmetric copying
@@ -571,14 +623,16 @@ def imresize_np(img, scale, antialiasing=True):
     kernel_width = weights_W.size(1)
     for i in range(out_W):
         idx = int(indices_W[i][0])
-        out_2[:, i, 0] = out_1_aug[:, idx:idx + kernel_width, 0].mv(weights_W[i])
-        out_2[:, i, 1] = out_1_aug[:, idx:idx + kernel_width, 1].mv(weights_W[i])
-        out_2[:, i, 2] = out_1_aug[:, idx:idx + kernel_width, 2].mv(weights_W[i])
+        out_2[:, i, 0] = out_1_aug[:, idx : idx + kernel_width, 0].mv(weights_W[i])
+        out_2[:, i, 1] = out_1_aug[:, idx : idx + kernel_width, 1].mv(weights_W[i])
+        out_2[:, i, 2] = out_1_aug[:, idx : idx + kernel_width, 2].mv(weights_W[i])
 
     return out_2.numpy()
 
 
-def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=[], not_endswith=[]):
+def load_paths_from_cache(
+    paths, cache_path, exclusion_list=[], endswith=[], not_endswith=[]
+):
     if not isinstance(paths, list):
         paths = [paths]
     if os.path.exists(cache_path):
@@ -587,7 +641,7 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=[], not
         print(f"Building cache for contents of {paths}..")
         output = []
         for p in paths:
-            output.extend(find_files_of_type('img', p, qualifier=is_audio_file)[0])
+            output.extend(find_files_of_type("img", p, qualifier=is_audio_file)[0])
         if exclusion_list is not None and len(exclusion_list) > 0:
             print(f"Removing exclusion lists..")
             before = len(output)
@@ -597,6 +651,7 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=[], not
             print(f"Excluded {before-len(output)} files.")
         if endswith is not None:
             before = len(output)
+
             def filter_fn(p):
                 for e in endswith:
                     if not p.endswith(e):
@@ -605,30 +660,36 @@ def load_paths_from_cache(paths, cache_path, exclusion_list=[], endswith=[], not
                     if p.endswith(e):
                         return False
                 return True
+
             output = list(filter(filter_fn, output))
-            print(f"!!Excluded {before-len(output)} files with endswith mask. For total of {len(output)} files")
+            print(
+                f"!!Excluded {before-len(output)} files with endswith mask. For total of {len(output)} files"
+            )
         print("Done.")
         torch.save(output, cache_path)
     return output
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # test imresize function
     # read images
-    img = cv2.imread('test.png')
+    img = cv2.imread("test.png")
     img = img * 1.0 / 255
     img = torch.from_numpy(np.transpose(img[:, :, [2, 1, 0]], (2, 0, 1))).float()
     # imresize
     scale = 1 / 4
     import time
+
     total_time = 0
     for i in range(10):
         start_time = time.time()
         rlt = imresize(img, scale, antialiasing=True)
         use_time = time.time() - start_time
         total_time += use_time
-    print('average time: {}'.format(total_time / 10))
+    print("average time: {}".format(total_time / 10))
 
     import torchvision.utils
-    torchvision.utils.save_image((rlt * 255).round() / 255, 'rlt.png', nrow=1, padding=0,
-                                 normalize=False)
+
+    torchvision.utils.save_image(
+        (rlt * 255).round() / 255, "rlt.png", nrow=1, padding=0, normalize=False
+    )

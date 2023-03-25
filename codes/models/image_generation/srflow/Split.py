@@ -7,17 +7,29 @@ from utils.util import opt_get
 
 
 class Split2d(nn.Module):
-    def __init__(self, num_channels, logs_eps=0, cond_channels=0, position=None, consume_ratio=0.5, opt=None):
+    def __init__(
+        self,
+        num_channels,
+        logs_eps=0,
+        cond_channels=0,
+        position=None,
+        consume_ratio=0.5,
+        opt=None,
+    ):
         super().__init__()
 
         self.num_channels_consume = int(round(num_channels * consume_ratio))
         self.num_channels_pass = num_channels - self.num_channels_consume
 
-        self.conv = Conv2dZeros(in_channels=self.num_channels_pass + cond_channels,
-                                out_channels=self.num_channels_consume * 2)
+        self.conv = Conv2dZeros(
+            in_channels=self.num_channels_pass + cond_channels,
+            out_channels=self.num_channels_consume * 2,
+        )
         self.logs_eps = logs_eps
         self.position = position
-        self.gaussian_nll_weight = opt_get(opt, ['networks', 'generator', 'flow', 'gaussian_loss_weight'], 1)
+        self.gaussian_nll_weight = opt_get(
+            opt, ["networks", "generator", "flow", "gaussian_loss_weight"], 1
+        )
 
     def split2d_prior(self, z, ft):
         if ft is not None:
@@ -28,12 +40,21 @@ class Split2d(nn.Module):
     def exp_eps(self, logs):
         return torch.exp(logs) + self.logs_eps
 
-    def forward(self, input, logdet=0., reverse=False, eps_std=None, eps=None, ft=None, y_onehot=None):
+    def forward(
+        self,
+        input,
+        logdet=0.0,
+        reverse=False,
+        eps_std=None,
+        eps=None,
+        ft=None,
+        y_onehot=None,
+    ):
         if not reverse:
             # self.input = input
             z1, z2 = self.split_ratio(input)
             mean, logs = self.split2d_prior(z1, ft)
-            
+
             eps = (z2 - mean) / self.exp_eps(logs)
 
             logdet = logdet + self.get_logdet(logs, mean, z2)
@@ -47,9 +68,9 @@ class Split2d(nn.Module):
             mean, logs = self.split2d_prior(z1, ft)
 
             if eps is None:
-                #print("WARNING: eps is None, generating eps untested functionality!")
+                # print("WARNING: eps is None, generating eps untested functionality!")
                 eps = GaussianDiag.sample(mean, logs, eps_std)
-                #eps = GaussianDiag.sample_eps(mean.shape, eps_std)
+                # eps = GaussianDiag.sample_eps(mean.shape, eps_std)
 
             eps = eps.to(mean.device)
             z2 = mean + self.exp_eps(logs) * eps
@@ -65,5 +86,8 @@ class Split2d(nn.Module):
         return logdet_diff * self.gaussian_nll_weight
 
     def split_ratio(self, input):
-        z1, z2 = input[:, :self.num_channels_pass, ...], input[:, self.num_channels_pass:, ...]
+        z1, z2 = (
+            input[:, : self.num_channels_pass, ...],
+            input[:, self.num_channels_pass :, ...],
+        )
         return z1, z2

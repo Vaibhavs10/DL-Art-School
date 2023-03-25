@@ -24,15 +24,15 @@ def initialize(X, num_clusters):
 
 
 def kmeans(
-        X,
-        num_clusters,
-        distance='euclidean',
-        cluster_centers=[],
-        tol=1e-4,
-        tqdm_flag=True,
-        iter_limit=0,
-        gravity_limit_per_iter=None,
-        device=torch.device('cpu')
+    X,
+    num_clusters,
+    distance="euclidean",
+    cluster_centers=[],
+    tol=1e-4,
+    tqdm_flag=True,
+    iter_limit=0,
+    gravity_limit_per_iter=None,
+    device=torch.device("cpu"),
 ):
     """
     perform kmeans
@@ -45,11 +45,11 @@ def kmeans(
     :param iter_limit: hard limit for max number of iterations
     :return: (torch.tensor, torch.tensor) cluster ids, cluster centers
     """
-    print(f'running k-means on {device}..')
+    print(f"running k-means on {device}..")
 
-    if distance == 'euclidean':
+    if distance == "euclidean":
         pairwise_distance_function = pairwise_distance
-    elif distance == 'cosine':
+    elif distance == "cosine":
         pairwise_distance_function = pairwise_cosine
     else:
         raise NotImplementedError
@@ -64,7 +64,7 @@ def kmeans(
     if type(cluster_centers) == list:  # ToDo: make this less annoyingly weird
         initial_state = initialize(X, num_clusters)
     else:
-        print('resuming')
+        print("resuming")
         # find data point closest to the initial cluster center
         initial_state = cluster_centers
         dis = pairwise_distance_function(X, initial_state)
@@ -74,9 +74,8 @@ def kmeans(
 
     iteration = 0
     if tqdm_flag:
-        tqdm_meter = tqdm(desc='[running kmeans]')
+        tqdm_meter = tqdm(desc="[running kmeans]")
     while True:
-
         dis = pairwise_distance_function(X, initial_state)
 
         choice_cluster = torch.argmin(dis, dim=1)
@@ -87,14 +86,13 @@ def kmeans(
             selected = torch.nonzero(choice_cluster == index).squeeze().to(device)
             selected = torch.index_select(X, 0, selected)
             if gravity_limit_per_iter and len(selected) > gravity_limit_per_iter:
-                ch = random.randint(0, len(selected)-gravity_limit_per_iter)
-                selected=selected[ch:ch+gravity_limit_per_iter]
+                ch = random.randint(0, len(selected) - gravity_limit_per_iter)
+                selected = selected[ch : ch + gravity_limit_per_iter]
             initial_state[index] = selected.mean(dim=0)
 
         center_shift = torch.sum(
-            torch.sqrt(
-                torch.sum((initial_state - initial_state_pre) ** 2, dim=1)
-            ))
+            torch.sqrt(torch.sum((initial_state - initial_state_pre) ** 2, dim=1))
+        )
 
         # increment iteration
         iteration = iteration + 1
@@ -103,13 +101,13 @@ def kmeans(
         bins = torch.bincount(choice_cluster)
         if tqdm_flag:
             tqdm_meter.set_postfix(
-                iteration=f'{iteration}',
-                center_shift=f'{center_shift ** 2}',
-                tol=f'{tol}',
-                bins=f'{bins}',
+                iteration=f"{iteration}",
+                center_shift=f"{center_shift ** 2}",
+                tol=f"{tol}",
+                bins=f"{bins}",
             )
             tqdm_meter.update()
-        if tol > 0 and center_shift ** 2 < tol:
+        if tol > 0 and center_shift**2 < tol:
             break
         if iter_limit != 0 and iteration >= iter_limit:
             break
@@ -117,11 +115,7 @@ def kmeans(
     return choice_cluster.cpu(), initial_state.cpu()
 
 
-def kmeans_predict(
-        X,
-        cluster_centers,
-        distance='euclidean'
-):
+def kmeans_predict(X, cluster_centers, distance="euclidean"):
     """
     predict using cluster centers
     :param X: (torch.tensor) matrix
@@ -130,9 +124,9 @@ def kmeans_predict(
     :param device: (torch.device) device [default: 'cpu']
     :return: (torch.tensor) cluster ids
     """
-    if distance == 'euclidean':
+    if distance == "euclidean":
         pairwise_distance_function = pairwise_distance
-    elif distance == 'cosine':
+    elif distance == "cosine":
         pairwise_distance_function = pairwise_cosine
     else:
         raise NotImplementedError

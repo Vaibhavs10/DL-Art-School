@@ -1,6 +1,7 @@
 import math
 from matplotlib import pyplot as plt
 
+
 # Base class for weight schedulers. Holds weight at a fixed initial value.
 class WeightScheduler:
     def __init__(self, initial_weight):
@@ -22,7 +23,9 @@ class LinearDecayWeightScheduler(WeightScheduler):
         step = step - self.initial_step
         if step < 0:
             return self.initial_weight
-        return max(self.lower_bound, self.initial_weight - step * self.decrease_per_step)
+        return max(
+            self.lower_bound, self.initial_weight - step * self.decrease_per_step
+        )
 
 
 class SinusoidalWeightScheduler(WeightScheduler):
@@ -42,20 +45,24 @@ class SinusoidalWeightScheduler(WeightScheduler):
 
 
 def get_scheduler_for_opt(opt):
-    if opt['type'] == 'fixed':
-        return WeightScheduler(opt['weight'])
-    elif opt['type'] == 'linear_decay':
-        return LinearDecayWeightScheduler(opt['initial_weight'], opt['steps'], opt['lower_bound'], opt['start_step'])
-    elif opt['type'] == 'sinusoidal':
-        return SinusoidalWeightScheduler(opt['upper_weight'], opt['lower_weight'], opt['period'], opt['start_step'])
+    if opt["type"] == "fixed":
+        return WeightScheduler(opt["weight"])
+    elif opt["type"] == "linear_decay":
+        return LinearDecayWeightScheduler(
+            opt["initial_weight"], opt["steps"], opt["lower_bound"], opt["start_step"]
+        )
+    elif opt["type"] == "sinusoidal":
+        return SinusoidalWeightScheduler(
+            opt["upper_weight"], opt["lower_weight"], opt["period"], opt["start_step"]
+        )
     else:
         raise NotImplementedError
 
 
 # Do some testing.
 if __name__ == "__main__":
-    #sched = SinusoidalWeightScheduler(1, .1, 50, 10)
-    sched = LinearDecayWeightScheduler(10, 5000, .9, 2000)
+    # sched = SinusoidalWeightScheduler(1, .1, 50, 10)
+    sched = LinearDecayWeightScheduler(10, 5000, 0.9, 2000)
 
     x = []
     y = []

@@ -14,13 +14,26 @@ class Mel2VecCodesGpt(nn.Module):
 
         self.num_groups = num_groups
 
-        self.config = GPT2Config(vocab_size=1, n_positions=8192, n_embd=dim, n_layer=layers, n_head=dim//64,
-                                 n_inner=dim*2)
+        self.config = GPT2Config(
+            vocab_size=1,
+            n_positions=8192,
+            n_embd=dim,
+            n_layer=layers,
+            n_head=dim // 64,
+            n_inner=dim * 2,
+        )
         self.gpt = GPT2Model(self.config)
         del self.gpt.wte  # Unused, we'll do our own embeddings.
         # nn.Embedding
-        self.embeddings = nn.ModuleList([mbnb.nn.Embedding(num_vectors, dim//num_groups) for _ in range(num_groups)])
-        self.heads = nn.ModuleList([mbnb.nn.Linear(dim, num_vectors) for _ in range(num_groups)])
+        self.embeddings = nn.ModuleList(
+            [
+                mbnb.nn.Embedding(num_vectors, dim // num_groups)
+                for _ in range(num_groups)
+            ]
+        )
+        self.heads = nn.ModuleList(
+            [mbnb.nn.Linear(dim, num_vectors) for _ in range(num_groups)]
+        )
 
     def forward(self, codes):
         assert codes.shape[-1] == self.num_groups
@@ -34,8 +47,8 @@ class Mel2VecCodesGpt(nn.Module):
 
         losses = 0
         for i, head in enumerate(self.heads):
-            logits = head(h).permute(0,2,1)
-            loss = F.cross_entropy(logits, targets[:,:,i])
+            logits = head(h).permute(0, 2, 1)
+            loss = F.cross_entropy(logits, targets[:, :, i])
             losses = losses + loss
 
         return losses / self.num_groups
@@ -43,10 +56,10 @@ class Mel2VecCodesGpt(nn.Module):
 
 @register_model
 def register_music_gpt(opt_net, opt):
-    return Mel2VecCodesGpt(**opt_get(opt_net, ['kwargs'], {}))
+    return Mel2VecCodesGpt(**opt_get(opt_net, ["kwargs"], {}))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = Mel2VecCodesGpt(512, 8)
-    codes = torch.randint(0,8, (2,300,8))
+    codes = torch.randint(0, 8, (2, 300, 8))
     model(codes)

@@ -57,7 +57,7 @@ def loss_fn(x, y):
 
 
 # exponential moving average
-class EMA():
+class EMA:
     def __init__(self, beta):
         super().__init__()
         self.beta = beta
@@ -69,7 +69,9 @@ class EMA():
 
 
 def update_moving_average(ema_updater, ma_model, current_model):
-    for current_params, ma_params in zip(current_model.parameters(), ma_model.parameters()):
+    for current_params, ma_params in zip(
+        current_model.parameters(), ma_model.parameters()
+    ):
         old_weight, up_weight = ma_params.data, current_params.data
         ma_params.data = ema_updater.update_average(old_weight, up_weight)
 
@@ -82,7 +84,7 @@ class MLP(nn.Module):
             mbnb.nn.Linear(dim, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(inplace=True),
-            mbnb.nn.Linear(hidden_size, projection_size)
+            mbnb.nn.Linear(hidden_size, projection_size),
         )
 
     def forward(self, x):
@@ -107,7 +109,7 @@ class StructuralMLP(nn.Module):
             mbnb.nn.Linear(flattened_dim, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(inplace=True),
-            mbnb.nn.Linear(hidden_size, projection_size)
+            mbnb.nn.Linear(hidden_size, projection_size),
         )
 
     def forward(self, x):
@@ -118,7 +120,14 @@ class StructuralMLP(nn.Module):
 # will manage the interception of the hidden layer output
 # and pipe it into the projecter and predictor nets
 class NetWrapper(nn.Module):
-    def __init__(self, net, projection_size, projection_hidden_size, layer=-2, use_structural_mlp=False):
+    def __init__(
+        self,
+        net,
+        projection_size,
+        projection_hidden_size,
+        layer=-2,
+        use_structural_mlp=False,
+    ):
         super().__init__()
         self.net = net
         self.layer = layer
@@ -145,16 +154,18 @@ class NetWrapper(nn.Module):
 
     def _register_hook(self):
         layer = self._find_layer()
-        assert layer is not None, f'hidden layer ({self.layer}) not found'
+        assert layer is not None, f"hidden layer ({self.layer}) not found"
         handle = layer.register_forward_hook(self._hook)
         self.hook_registered = True
 
-    @singleton('projector')
+    @singleton("projector")
     def _get_projector(self, hidden):
         if self.structural_mlp:
-            projector = StructuralMLP(hidden.shape, self.projection_size, self.projection_hidden_size)
+            projector = StructuralMLP(
+                hidden.shape, self.projection_size, self.projection_hidden_size
+            )
         else:
-            _, dim = hidden.flatten(1,-1).shape
+            _, dim = hidden.flatten(1, -1).shape
             projector = MLP(dim, self.projection_size, self.projection_hidden_size)
         return projector.to(hidden)
 
@@ -168,7 +179,7 @@ class NetWrapper(nn.Module):
         unused = self.net(x)
         hidden = self.hidden
         self.hidden = None
-        assert hidden is not None, f'hidden layer {self.layer} never emitted an output'
+        assert hidden is not None, f"hidden layer {self.layer} never emitted an output"
         return hidden
 
     def forward(self, x):
@@ -180,37 +191,45 @@ class NetWrapper(nn.Module):
 
 class BYOL(nn.Module):
     def __init__(
-            self,
-            net,
-            image_size,
-            hidden_layer=-2,
-            projection_size=256,
-            projection_hidden_size=4096,
-            moving_average_decay=0.99,
-            use_momentum=True,
-            structural_mlp=False,
-            positional_dimension=2,  # 2 for images, 1 for audio, everything else isn't supported.
-            perform_augmentation=True,
+        self,
+        net,
+        image_size,
+        hidden_layer=-2,
+        projection_size=256,
+        projection_hidden_size=4096,
+        moving_average_decay=0.99,
+        use_momentum=True,
+        structural_mlp=False,
+        positional_dimension=2,  # 2 for images, 1 for audio, everything else isn't supported.
+        perform_augmentation=True,
     ):
         super().__init__()
 
-        self.online_encoder = NetWrapper(net, projection_size, projection_hidden_size, layer=hidden_layer,
-                                         use_structural_mlp=structural_mlp)
+        self.online_encoder = NetWrapper(
+            net,
+            projection_size,
+            projection_hidden_size,
+            layer=hidden_layer,
+            use_structural_mlp=structural_mlp,
+        )
 
         self.perform_augmentation = perform_augmentation
         if self.perform_augmentation:
-            augmentations = [ \
+            augmentations = [
                 RandomApply(augs.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.8),
                 augs.RandomGrayscale(p=0.2),
                 augs.RandomHorizontalFlip(),
                 RandomApply(filters.GaussianBlur2d((3, 3), (1.5, 1.5)), p=0.1),
-                augs.RandomResizedCrop((image_size, image_size))]
+                augs.RandomResizedCrop((image_size, image_size)),
+            ]
             self.aug = nn.Sequential(*augmentations)
         self.use_momentum = use_momentum
         self.target_encoder = None
         self.target_ema_updater = EMA(moving_average_decay)
 
-        self.online_predictor = MLP(projection_size, projection_size, projection_hidden_size)
+        self.online_predictor = MLP(
+            projection_size, projection_size, projection_hidden_size
+        )
 
         # get device of network and make wrapper same device
         device = get_module_device(net)
@@ -219,13 +238,17 @@ class BYOL(nn.Module):
         # send a mock image tensor to instantiate singleton parameters
         self.positional_dimension = positional_dimension
         if positional_dimension == 2:
-            self.forward(torch.randn(2, 3, image_size, image_size, device=device),
-                         torch.randn(2, 3, image_size, image_size, device=device))
+            self.forward(
+                torch.randn(2, 3, image_size, image_size, device=device),
+                torch.randn(2, 3, image_size, image_size, device=device),
+            )
         else:
-            self.forward(torch.randn(2, 1, 48000, device=device),
-                         torch.randn(2, 1, 48000, device=device))
+            self.forward(
+                torch.randn(2, 1, 48000, device=device),
+                torch.randn(2, 1, 48000, device=device),
+            )
 
-    @singleton('target_encoder')
+    @singleton("target_encoder")
     def _get_target_encoder(self):
         target_encoder = copy.deepcopy(self.online_encoder)
         set_requires_grad(target_encoder, False)
@@ -238,18 +261,28 @@ class BYOL(nn.Module):
         self.target_encoder = None
 
     def update_for_step(self, step, __):
-        assert self.use_momentum, 'you do not need to update the moving average, since you have turned off momentum for the target encoder'
-        assert self.target_encoder is not None, 'target encoder has not been created yet'
-        update_moving_average(self.target_ema_updater, self.target_encoder, self.online_encoder)
+        assert (
+            self.use_momentum
+        ), "you do not need to update the moving average, since you have turned off momentum for the target encoder"
+        assert (
+            self.target_encoder is not None
+        ), "target encoder has not been created yet"
+        update_moving_average(
+            self.target_ema_updater, self.target_encoder, self.online_encoder
+        )
 
     def get_debug_values(self, step, __):
         # In the BYOL paper, this is made to increase over time. Not yet implemented, but still logging the value.
-        return {'target_ema_beta': self.target_ema_updater.beta}
+        return {"target_ema_beta": self.target_ema_updater.beta}
 
     def visual_dbg(self, step, path):
         if self.perform_augmentation and self.positional_dimension == 2:
-            torchvision.utils.save_image(self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,)))
-            torchvision.utils.save_image(self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,)))
+            torchvision.utils.save_image(
+                self.im1.cpu().float(), os.path.join(path, "%i_image1.png" % (step,))
+            )
+            torchvision.utils.save_image(
+                self.im2.cpu().float(), os.path.join(path, "%i_image2.png" % (step,))
+            )
 
     def forward(self, image_one, image_two):
         if self.perform_augmentation:
@@ -266,7 +299,9 @@ class BYOL(nn.Module):
         online_pred_two = self.online_predictor(online_proj_two)
 
         with torch.no_grad():
-            target_encoder = self._get_target_encoder() if self.use_momentum else self.online_encoder
+            target_encoder = (
+                self._get_target_encoder() if self.use_momentum else self.online_encoder
+            )
             target_proj_one = target_encoder(image_one).detach()
             target_proj_two = target_encoder(image_two).detach()
 
@@ -279,8 +314,12 @@ class BYOL(nn.Module):
 
 @register_model
 def register_byol(opt_net, opt):
-    subnet = create_model(opt, opt_net['subnet'])
-    return BYOL(subnet, opt_net['image_size'], opt_net['hidden_layer'],
-                structural_mlp=opt_get(opt_net, ['use_structural_mlp'], False),
-                positional_dimension=opt_get(opt_net, ['positional_dims'], 2),
-                perform_augmentation=opt_get(opt_net, ['aug_enable'], True))
+    subnet = create_model(opt, opt_net["subnet"])
+    return BYOL(
+        subnet,
+        opt_net["image_size"],
+        opt_net["hidden_layer"],
+        structural_mlp=opt_get(opt_net, ["use_structural_mlp"], False),
+        positional_dimension=opt_get(opt_net, ["positional_dims"], 2),
+        perform_augmentation=opt_get(opt_net, ["aug_enable"], True),
+    )

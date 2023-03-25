@@ -15,7 +15,8 @@ import torch
 import numpy as np
 
 current_batch = None
-output_file = open('find_faulty_files_results.tsv', 'a')
+output_file = open("find_faulty_files_results.tsv", "a")
+
 
 class LossWrapper:
     def __init__(self, lwrap):
@@ -35,13 +36,13 @@ class LossWrapper:
         global current_batch
         global output_file
         val = state[self.lwrap.key]
-        assert val.shape[0] == len(current_batch['path'])
+        assert val.shape[0] == len(current_batch["path"])
         val = val.view(val.shape[0], -1)
         val = val.mean(dim=1)
         errant = torch.nonzero(val > 8)
         for i in errant:
             print(f"ERRANT FOUND: {val[i]} path: {current_batch['path'][i]}")
-            output_file.write(current_batch['path'][i] + "\n")
+            output_file.write(current_batch["path"][i] + "\n")
         output_file.flush()
         return self.lwrap(m, state)
 
@@ -58,33 +59,52 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     want_metrics = False
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, help='Path to options YAML file.', default='../experiments/clean_with_lrdvae.yml')
+    parser.add_argument(
+        "-opt",
+        type=str,
+        help="Path to options YAML file.",
+        default="../experiments/clean_with_lrdvae.yml",
+    )
     opt = option.parse(parser.parse_args().opt, is_train=True)
     opt = option.dict_to_nonedict(opt)
     utils.util.loaded_options = opt
 
     util.mkdirs(
-        (path for key, path in opt['path'].items()
-         if not key == 'experiments_root' and 'pretrain_model' not in key and 'resume' not in key))
-    util.setup_logger('base', opt['path']['log'], 'test_' + opt['name'], level=logging.INFO,
-                      screen=True, tofile=True)
-    logger = logging.getLogger('base')
+        (
+            path
+            for key, path in opt["path"].items()
+            if not key == "experiments_root"
+            and "pretrain_model" not in key
+            and "resume" not in key
+        )
+    )
+    util.setup_logger(
+        "base",
+        opt["path"]["log"],
+        "test_" + opt["name"],
+        level=logging.INFO,
+        screen=True,
+        tofile=True,
+    )
+    logger = logging.getLogger("base")
     logger.info(option.dict2str(opt))
 
     #### Create test dataset and dataloader
-    dataset = create_dataset(opt['datasets']['train'])
-    dataloader = create_dataloader(dataset, opt['datasets']['train'])
-    logger.info('Number of test images in [{:s}]: {:d}'.format(opt['datasets']['train']['name'], len(dataset)))
+    dataset = create_dataset(opt["datasets"]["train"])
+    dataloader = create_dataloader(dataset, opt["datasets"]["train"])
+    logger.info(
+        "Number of test images in [{:s}]: {:d}".format(
+            opt["datasets"]["train"]["name"], len(dataset)
+        )
+    )
 
     model = ExtensibleTrainer(opt)
     assert len(model.steps) == 1
 
     step = model.steps[0]
-    step.losses['reconstruction_loss'] = LossWrapper(step.losses['reconstruction_loss'])
+    step.losses["reconstruction_loss"] = LossWrapper(step.losses["reconstruction_loss"])
 
     for i, data in enumerate(tqdm(dataloader)):
         current_batch = data
         model.feed_data(data, i)
         model.optimize_parameters(i, optimize=False)
-
-

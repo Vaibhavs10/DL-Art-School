@@ -6,10 +6,10 @@ from trainer.inject import Injector
 
 
 def create_stereoscopic_injector(opt, env):
-    type = opt['type']
-    if type == 'stereoscopic_resample':
+    type = opt["type"]
+    if type == "stereoscopic_resample":
         return ResampleInjector(opt, env)
-    elif type == 'stereoscopic_flow2image':
+    elif type == "stereoscopic_flow2image":
         return Flow2Image(opt, env)
     return None
 
@@ -18,7 +18,7 @@ class ResampleInjector(Injector):
     def __init__(self, opt, env):
         super(ResampleInjector, self).__init__(opt, env)
         self.resample = Resample2d()
-        self.flow = opt['flowfield']
+        self.flow = opt["flowfield"]
 
     def forward(self, state):
         with autocast(enabled=False):
@@ -36,11 +36,15 @@ class Flow2Image(Injector):
         with torch.no_grad():
             flo = state[self.input].cpu()
             bs, c, h, w = flo.shape
-            flo = flo.permute(0, 2, 3, 1)  # flow2img works in numpy space for some reason..
+            flo = flo.permute(
+                0, 2, 3, 1
+            )  # flow2img works in numpy space for some reason..
             imgs = torch.empty_like(flo)
             flo = flo.numpy()
             for b in range(bs):
-                img = flow2img(flo[b])  # Note that this returns the image in an integer format.
+                img = flow2img(
+                    flo[b]
+                )  # Note that this returns the image in an integer format.
                 img = torch.tensor(img, dtype=torch.float) / 255
                 imgs[b] = img
             imgs = imgs.permute(0, 3, 1, 2)

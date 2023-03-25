@@ -16,39 +16,52 @@ class FullImageDataset(data.Dataset):
     Read LQ (Low Quality, e.g. LR (Low Resolution), blurry, etc) and GT image pairs.
     If only GT images are provided, generate LQ images on-the-fly.
     """
+
     def get_lq_path(self, i):
-        which_lq = random.randint(0, len(self.paths_LQ)-1)
+        which_lq = random.randint(0, len(self.paths_LQ) - 1)
         return self.paths_LQ[which_lq][i % len(self.paths_LQ[which_lq])]
 
     def __init__(self, opt):
         super(FullImageDataset, self).__init__()
         self.opt = opt
-        self.data_type = 'img'
+        self.data_type = "img"
         self.paths_LQ, self.paths_GT = None, None
         self.sizes_LQ, self.sizes_GT = None, None
         self.LQ_env, self.GT_env = None, None
-        self.force_multiple = self.opt['force_multiple'] if 'force_multiple' in self.opt.keys() else 1
+        self.force_multiple = (
+            self.opt["force_multiple"] if "force_multiple" in self.opt.keys() else 1
+        )
 
-        self.paths_GT, self.sizes_GT = util.find_files_of_type(self.data_type, opt['dataroot_GT'], opt['dataroot_GT_weights'])
-        if 'dataroot_LQ' in opt.keys():
+        self.paths_GT, self.sizes_GT = util.find_files_of_type(
+            self.data_type, opt["dataroot_GT"], opt["dataroot_GT_weights"]
+        )
+        if "dataroot_LQ" in opt.keys():
             self.paths_LQ = []
-            if isinstance(opt['dataroot_LQ'], list):
+            if isinstance(opt["dataroot_LQ"], list):
                 # Multiple LQ data sources can be given, in case there are multiple ways of corrupting a source image and
                 # we want the model to learn them all.
-                for dr_lq in opt['dataroot_LQ']:
-                    lq_path, self.sizes_LQ = util.find_files_of_type(self.data_type, dr_lq)
+                for dr_lq in opt["dataroot_LQ"]:
+                    lq_path, self.sizes_LQ = util.find_files_of_type(
+                        self.data_type, dr_lq
+                    )
                     self.paths_LQ.append(lq_path)
             else:
-                lq_path, self.sizes_LQ = util.find_files_of_type(self.data_type, opt['dataroot_LQ'])
+                lq_path, self.sizes_LQ = util.find_files_of_type(
+                    self.data_type, opt["dataroot_LQ"]
+                )
                 self.paths_LQ.append(lq_path)
 
-        assert self.paths_GT, 'Error: GT path is empty.'
+        assert self.paths_GT, "Error: GT path is empty."
         self.random_scale_list = [1]
 
     def motion_blur(self, image, size, angle):
         k = np.zeros((size, size), dtype=np.float32)
         k[(size - 1) // 2, :] = np.ones(size, dtype=np.float32)
-        k = cv2.warpAffine(k, cv2.getRotationMatrix2D((size / 2 - 0.5, size / 2 - 0.5), angle, 1.0), (size, size))
+        k = cv2.warpAffine(
+            k,
+            cv2.getRotationMatrix2D((size / 2 - 0.5, size / 2 - 0.5), angle, 1.0),
+            (size, size),
+        )
         k = k * (1.0 / np.sum(k))
         return cv2.filter2D(image, -1, k)
 
@@ -58,22 +71,28 @@ class FullImageDataset(data.Dataset):
         h, w, _ = image.shape
         if h == w:
             return image
-        offset = max(min(np.random.normal(scale=.3), 1.0), -1.0)
+        offset = max(min(np.random.normal(scale=0.3), 1.0), -1.0)
         if h > w:
             diff = h - w
             center = diff // 2
             top = int(center + offset * (center - 2))
-            return image[top:top+w, :, :]
+            return image[top : top + w, :, :]
         else:
             diff = w - h
             center = diff // 2
             left = int(center + offset * (center - 2))
-            return image[:, left:left+h, :]
+            return image[:, left : left + h, :]
 
     def pick_along_range(self, sz, r, dev):
         margin_sz = sz - r
         margin_center = margin_sz // 2
-        return min(max(int(min(np.random.normal(scale=dev), 1.0) * margin_sz + margin_center), 0), margin_sz)
+        return min(
+            max(
+                int(min(np.random.normal(scale=dev), 1.0) * margin_sz + margin_center),
+                0,
+            ),
+            margin_sz,
+        )
 
     def resize_point(self, point, orig_dim, new_dim):
         oh, ow = orig_dim
@@ -92,36 +111,50 @@ class FullImageDataset(data.Dataset):
     # - A biased normal distribution is also used to bias the tile selection towards the center of the source image.
     def pull_tile(self, image, lq=False):
         if lq:
-            target_sz = self.opt['min_tile_size'] // self.opt['scale']
+            target_sz = self.opt["min_tile_size"] // self.opt["scale"]
         else:
-            target_sz = self.opt['min_tile_size']
+            target_sz = self.opt["min_tile_size"]
         h, w, _ = image.shape
         possible_sizes_above_target = h - target_sz
-        if 'fixed_size' in self.opt.keys() and self.opt['fixed_size']:
+        if "fixed_size" in self.opt.keys() and self.opt["fixed_size"]:
             square_size = target_sz
         else:
-            tile_expansion_dev = self.opt['tile_scale_normal_stddev'] if 'tile_scale_normal_stddev' in self.opt.keys() else .17
-            square_size = int(target_sz + possible_sizes_above_target * min(np.abs(np.random.normal(scale=tile_expansion_dev)), 1.0))
+            tile_expansion_dev = (
+                self.opt["tile_scale_normal_stddev"]
+                if "tile_scale_normal_stddev" in self.opt.keys()
+                else 0.17
+            )
+            square_size = int(
+                target_sz
+                + possible_sizes_above_target
+                * min(np.abs(np.random.normal(scale=tile_expansion_dev)), 1.0)
+            )
 
         # Pick the left,top coords to draw the patch from
-        left = self.pick_along_range(w, square_size, .3)
-        top = self.pick_along_range(w, square_size, .3)
+        left = self.pick_along_range(w, square_size, 0.3)
+        top = self.pick_along_range(w, square_size, 0.3)
 
         mask = np.zeros((h, w, 1), dtype=image.dtype)
-        mask[top:top+square_size, left:left+square_size] = 1
-        patch = image[top:top+square_size, left:left+square_size, :]
-        center = torch.tensor([top + square_size // 2, left + square_size // 2], dtype=torch.long)
+        mask[top : top + square_size, left : left + square_size] = 1
+        patch = image[top : top + square_size, left : left + square_size, :]
+        center = torch.tensor(
+            [top + square_size // 2, left + square_size // 2], dtype=torch.long
+        )
 
-        patch = cv2.resize(patch, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
-        image = cv2.resize(image, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
+        patch = cv2.resize(
+            patch, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR
+        )
+        image = cv2.resize(
+            image, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR
+        )
         mask = cv2.resize(mask, (target_sz, target_sz), interpolation=cv2.INTER_LINEAR)
         center = self.resize_point(center, (h, w), image.shape[:2])
 
         return patch, image, mask, center
 
     def augment_tile(self, img_GT, img_LQ, strength=1):
-        scale = self.opt['scale']
-        GT_size = self.opt['target_size']
+        scale = self.opt["scale"]
+        GT_size = self.opt["target_size"]
 
         H, W, _ = img_GT.shape
         assert H >= GT_size and W >= GT_size
@@ -130,16 +163,26 @@ class FullImageDataset(data.Dataset):
         img_LQ = cv2.resize(img_LQ, (LQ_size, LQ_size), interpolation=cv2.INTER_LINEAR)
         img_GT = cv2.resize(img_GT, (GT_size, GT_size), interpolation=cv2.INTER_LINEAR)
 
-        if self.opt['use_blurring']:
+        if self.opt["use_blurring"]:
             # Pick randomly between gaussian, motion, or no blur.
             blur_det = random.randint(0, 100)
-            blur_magnitude = 3 if 'blur_magnitude' not in self.opt.keys() else self.opt['blur_magnitude']
-            blur_magnitude = max(1, int(blur_magnitude*strength))
+            blur_magnitude = (
+                3
+                if "blur_magnitude" not in self.opt.keys()
+                else self.opt["blur_magnitude"]
+            )
+            blur_magnitude = max(1, int(blur_magnitude * strength))
             if blur_det < 40:
                 blur_sig = int(random.randrange(0, int(blur_magnitude)))
-                img_LQ = cv2.GaussianBlur(img_LQ, (blur_magnitude, blur_magnitude), blur_sig)
+                img_LQ = cv2.GaussianBlur(
+                    img_LQ, (blur_magnitude, blur_magnitude), blur_sig
+                )
             elif blur_det < 70:
-                img_LQ = self.motion_blur(img_LQ, random.randrange(1, int(blur_magnitude) * 3), random.randint(0, 360))
+                img_LQ = self.motion_blur(
+                    img_LQ,
+                    random.randrange(1, int(blur_magnitude) * 3),
+                    random.randint(0, 360),
+                )
 
         return img_GT, img_LQ
 
@@ -147,7 +190,7 @@ class FullImageDataset(data.Dataset):
     def pil_augment(self, img_LQ, strength=1):
         img_LQ = (img_LQ * 255).astype(np.uint8)
         img_LQ = Image.fromarray(img_LQ)
-        if self.opt['use_compression_artifacts'] and random.random() > .25:
+        if self.opt["use_compression_artifacts"] and random.random() > 0.25:
             sub_lo = 90 * strength
             sub_hi = 30 * strength
             qf = random.randrange(100 - sub_lo, 100 - sub_hi)
@@ -156,8 +199,8 @@ class FullImageDataset(data.Dataset):
             corruption_buffer.seek(0)
             img_LQ = Image.open(corruption_buffer)
 
-        if 'grayscale' in self.opt.keys() and self.opt['grayscale']:
-            img_LQ = ImageOps.grayscale(img_LQ).convert('RGB')
+        if "grayscale" in self.opt.keys() and self.opt["grayscale"]:
+            img_LQ = ImageOps.grayscale(img_LQ).convert("RGB")
 
         return img_LQ
 
@@ -180,7 +223,9 @@ class FullImageDataset(data.Dataset):
             image = cv2.medianBlur(image, 3)
         elif 3 in aug_code:
             # Motion blur
-            image = self.motion_blur(image, random.randrange(1, 9), random.randint(0, 360))
+            image = self.motion_blur(
+                image, random.randrange(1, 9), random.randint(0, 360)
+            )
         elif 4 in aug_code:
             # Smooth blur
             image = cv2.blur(image, ksize=3)
@@ -211,39 +256,50 @@ class FullImageDataset(data.Dataset):
         return image
 
     def __getitem__(self, index):
-        scale = self.opt['scale']
+        scale = self.opt["scale"]
 
         # get full size image
         full_path = self.paths_GT[index % len(self.paths_GT)]
         LQ_path = full_path
         img_full = util.read_img(None, full_path, None)
-        img_full = util.channel_convert(img_full.shape[2], 'RGB', [img_full])[0]
-        if self.opt['phase'] == 'train':
-            img_full = util.augment([img_full], self.opt['use_flip'], self.opt['use_rot'])[0]
+        img_full = util.channel_convert(img_full.shape[2], "RGB", [img_full])[0]
+        if self.opt["phase"] == "train":
+            img_full = util.augment(
+                [img_full], self.opt["use_flip"], self.opt["use_rot"]
+            )[0]
             img_full = self.get_square_image(img_full)
             img_GT, gt_fullsize_ref, gt_mask, gt_center = self.pull_tile(img_full)
         else:
             img_GT, gt_fullsize_ref = img_full, img_full
             gt_mask = np.ones(img_full.shape[:2], dtype=gt_fullsize_ref.dtype)
-            gt_center = torch.tensor([img_full.shape[0] // 2, img_full.shape[1] // 2], dtype=torch.long)
+            gt_center = torch.tensor(
+                [img_full.shape[0] // 2, img_full.shape[1] // 2], dtype=torch.long
+            )
         orig_gt_dim = gt_fullsize_ref.shape[:2]
 
         # get LQ image
         if self.paths_LQ:
             LQ_path = self.get_lq_path(index)
             img_lq_full = util.read_img(None, LQ_path, None)
-            if self.opt['phase'] == 'train':
-                img_lq_full = util.augment([img_lq_full], self.opt['use_flip'], self.opt['use_rot'])[0]
+            if self.opt["phase"] == "train":
+                img_lq_full = util.augment(
+                    [img_lq_full], self.opt["use_flip"], self.opt["use_rot"]
+                )[0]
                 img_lq_full = self.get_square_image(img_lq_full)
-                img_LQ, lq_fullsize_ref, lq_mask, lq_center = self.pull_tile(img_lq_full, lq=True)
+                img_LQ, lq_fullsize_ref, lq_mask, lq_center = self.pull_tile(
+                    img_lq_full, lq=True
+                )
             else:
                 img_LQ, lq_fullsize_ref = img_lq_full, img_lq_full
                 lq_mask = np.ones(img_lq_full.shape[:2], dtype=lq_fullsize_ref.dtype)
-                lq_center = torch.tensor([img_lq_full.shape[0] // 2, img_lq_full.shape[1] // 2], dtype=torch.long)
+                lq_center = torch.tensor(
+                    [img_lq_full.shape[0] // 2, img_lq_full.shape[1] // 2],
+                    dtype=torch.long,
+                )
         else:  # down-sampling on-the-fly
             # randomly scale during training
-            if self.opt['phase'] == 'train':
-                GT_size = self.opt['target_size']
+            if self.opt["phase"] == "train":
+                GT_size = self.opt["target_size"]
                 random_scale = random.choice(self.random_scale_list)
                 if len(img_GT.shape) == 2:
                     print("ERRAR:")
@@ -269,7 +325,9 @@ class FullImageDataset(data.Dataset):
             lq_fullsize_ref = util.imresize_np(gt_fullsize_ref, 1 / scale, True)
             if img_LQ.ndim == 2:
                 img_LQ = np.expand_dims(img_LQ, axis=2)
-            lq_mask, lq_center = gt_mask, self.resize_point(gt_center.clone(), orig_gt_dim, lq_fullsize_ref.shape[:2])
+            lq_mask, lq_center = gt_mask, self.resize_point(
+                gt_center.clone(), orig_gt_dim, lq_fullsize_ref.shape[:2]
+            )
         orig_lq_dim = lq_fullsize_ref.shape[:2]
 
         # Enforce force_resize constraints via clipping.
@@ -283,13 +341,23 @@ class FullImageDataset(data.Dataset):
             img_GT = img_GT[:h, :w]
             gt_fullsize_ref = gt_fullsize_ref[:h, :w, :]
 
-        if self.opt['phase'] == 'train':
+        if self.opt["phase"] == "train":
             img_GT, img_LQ = self.augment_tile(img_GT, img_LQ)
-            gt_fullsize_ref, lq_fullsize_ref = self.augment_tile(gt_fullsize_ref, lq_fullsize_ref, strength=.2)
+            gt_fullsize_ref, lq_fullsize_ref = self.augment_tile(
+                gt_fullsize_ref, lq_fullsize_ref, strength=0.2
+            )
 
         # Scale masks.
-        lq_mask = cv2.resize(lq_mask, (lq_fullsize_ref.shape[1], lq_fullsize_ref.shape[0]), interpolation=cv2.INTER_LINEAR)
-        gt_mask = cv2.resize(gt_mask, (gt_fullsize_ref.shape[1], gt_fullsize_ref.shape[0]), interpolation=cv2.INTER_LINEAR)
+        lq_mask = cv2.resize(
+            lq_mask,
+            (lq_fullsize_ref.shape[1], lq_fullsize_ref.shape[0]),
+            interpolation=cv2.INTER_LINEAR,
+        )
+        gt_mask = cv2.resize(
+            gt_mask,
+            (gt_fullsize_ref.shape[1], gt_fullsize_ref.shape[0]),
+            interpolation=cv2.INTER_LINEAR,
+        )
 
         # Scale center coords
         lq_center = self.resize_point(lq_center, orig_lq_dim, lq_fullsize_ref.shape[:2])
@@ -303,19 +371,23 @@ class FullImageDataset(data.Dataset):
             gt_fullsize_ref = cv2.cvtColor(gt_fullsize_ref, cv2.COLOR_BGR2RGB)
 
         # LQ needs to go to a PIL image to perform the compression-artifact transformation.
-        #if self.opt['phase'] == 'train':
-            #img_LQ = self.pil_augment(img_LQ)
-            #lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
+        # if self.opt['phase'] == 'train':
+        # img_LQ = self.pil_augment(img_LQ)
+        # lq_fullsize_ref = self.pil_augment(lq_fullsize_ref, strength=.2)
 
-        img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
-        gt_fullsize_ref = torch.from_numpy(np.ascontiguousarray(np.transpose(gt_fullsize_ref, (2, 0, 1)))).float()
+        img_GT = torch.from_numpy(
+            np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))
+        ).float()
+        gt_fullsize_ref = torch.from_numpy(
+            np.ascontiguousarray(np.transpose(gt_fullsize_ref, (2, 0, 1)))
+        ).float()
         img_LQ = F.to_tensor(img_LQ)
         lq_fullsize_ref = F.to_tensor(lq_fullsize_ref)
         lq_mask = torch.from_numpy(np.ascontiguousarray(lq_mask)).unsqueeze(dim=0)
         gt_mask = torch.from_numpy(np.ascontiguousarray(gt_mask)).unsqueeze(dim=0)
 
-        if 'lq_noise' in self.opt.keys():
-            lq_noise = torch.randn_like(img_LQ) * self.opt['lq_noise'] / 255
+        if "lq_noise" in self.opt.keys():
+            lq_noise = torch.randn_like(img_LQ) * self.opt["lq_noise"] / 255
             img_LQ += lq_noise
             lq_fullsize_ref += lq_noise
 
@@ -323,16 +395,24 @@ class FullImageDataset(data.Dataset):
         gt_fullsize_ref = torch.cat([gt_fullsize_ref, gt_mask], dim=0)
         lq_fullsize_ref = torch.cat([lq_fullsize_ref, lq_mask], dim=0)
 
-        d = {'lq': img_LQ, 'hq': img_GT, 'gt_fullsize_ref': gt_fullsize_ref, 'lq_fullsize_ref': lq_fullsize_ref,
-             'lq_center': lq_center, 'gt_center': gt_center,
-             'LQ_path': LQ_path, 'HQ_path': full_path}
+        d = {
+            "lq": img_LQ,
+            "hq": img_GT,
+            "gt_fullsize_ref": gt_fullsize_ref,
+            "lq_fullsize_ref": lq_fullsize_ref,
+            "lq_center": lq_center,
+            "gt_center": gt_center,
+            "LQ_path": LQ_path,
+            "HQ_path": full_path,
+        }
         return d
 
     def __len__(self):
         return len(self.paths_GT)
 
-if __name__ == '__main__':
-    '''
+
+if __name__ == "__main__":
+    """
     opt = {
         'name': 'amalgam',
         'dataroot_GT': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images'],
@@ -347,28 +427,29 @@ if __name__ == '__main__':
         'scale': 2,
         'phase': 'train'
     }
-    '''
+    """
     opt = {
-        'name': 'amalgam',
-        'dataroot_GT': ['F:\\4k6k\\datasets\\ns_images\\imagesets\\images'],
-        'dataroot_GT_weights': [1],
-        'force_multiple': 32,
-        'scale': 2,
-        'phase': 'test'
+        "name": "amalgam",
+        "dataroot_GT": ["F:\\4k6k\\datasets\\ns_images\\imagesets\\images"],
+        "dataroot_GT_weights": [1],
+        "force_multiple": 32,
+        "scale": 2,
+        "phase": "test",
     }
 
     ds = FullImageDataset(opt)
     import os
+
     os.makedirs("debug", exist_ok=True)
     for i in range(300, len(ds)):
         print(i)
         o = ds[i]
         for k, v in o.items():
-            if 'path' not in k:
-                #if 'full' in k:
-                    #masked = v[:3, :, :] * v[3]
-                    #torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
-                    #v = v[:3, :, :]
-                #import torchvision
-                #torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
+            if "path" not in k:
+                # if 'full' in k:
+                # masked = v[:3, :, :] * v[3]
+                # torchvision.utils.save_image(masked.unsqueeze(0), "debug/%i_%s_masked.png" % (i, k))
+                # v = v[:3, :, :]
+                # import torchvision
+                # torchvision.utils.save_image(v.unsqueeze(0), "debug/%i_%s.png" % (i, k))
                 pass

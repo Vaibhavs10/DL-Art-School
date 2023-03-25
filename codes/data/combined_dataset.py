@@ -11,8 +11,8 @@ class CombinedDataset(torch.utils.data.Dataset):
             if not isinstance(v, dict):
                 continue
             # Scale&phase gets injected by options.py..
-            v['scale'] = opt['scale']
-            v['phase'] = opt['phase']
+            v["scale"] = opt["scale"]
+            v["phase"] = opt["phase"]
             self.datasets[k] = create_dataset(v)
         self.items_fetched = 0
 
@@ -22,7 +22,7 @@ class CombinedDataset(torch.utils.data.Dataset):
         for name, dataset in self.datasets.items():
             prefix = ""
             # 'default' dataset gets no prefix, other ones get `key_`
-            if name != 'default':
+            if name != "default":
                 prefix = name + "_"
 
             data = dataset[i % len(dataset)]

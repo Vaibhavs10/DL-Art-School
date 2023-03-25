@@ -102,7 +102,9 @@ class SpacedDiffusion(GaussianDiffusion):
         return super().condition_score(self._wrap_model(cond_fn), *args, **kwargs)
 
     def _wrap_model(self, model, autoregressive=False):
-        if isinstance(model, _WrappedModel) or isinstance(model, _WrappedAutoregressiveModel):
+        if isinstance(model, _WrappedModel) or isinstance(
+            model, _WrappedAutoregressiveModel
+        ):
             return model
         mod = _WrappedAutoregressiveModel if autoregressive else _WrappedModel
         return mod(

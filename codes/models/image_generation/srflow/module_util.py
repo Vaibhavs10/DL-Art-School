@@ -11,12 +11,12 @@ def initialize_weights(net_l, scale=1):
     for net in net_l:
         for m in net.modules():
             if isinstance(m, nn.Conv2d):
-                init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+                init.kaiming_normal_(m.weight, a=0, mode="fan_in")
                 m.weight.data *= scale  # for residual block
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, mbnb.nn.Linear):
-                init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+                init.kaiming_normal_(m.weight, a=0, mode="fan_in")
                 m.weight.data *= scale
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -33,10 +33,10 @@ def make_layer(block, n_layers):
 
 
 class ResidualBlock_noBN(nn.Module):
-    '''Residual block w/o BN
+    """Residual block w/o BN
     ---Conv-ReLU-Conv-+-
      |________________|
-    '''
+    """
 
     def __init__(self, nf=64):
         super(ResidualBlock_noBN, self).__init__()
@@ -53,7 +53,7 @@ class ResidualBlock_noBN(nn.Module):
         return identity + out
 
 
-def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros'):
+def flow_warp(x, flow, interp_mode="bilinear", padding_mode="zeros"):
     """Warp an image or feature map with optical flow
     Args:
         x (Tensor): size (N, C, H, W)

@@ -1,5 +1,6 @@
 import torch
 
+
 def get_experiment_for_name(name):
     return Experiment()
 
@@ -25,20 +26,26 @@ class ModelParameterDepthTrackerMetrics(Experiment):
     def get_network_and_step_names(self):
         # Subclasses should return the network being debugged and the step name it is trained in. return: (net, stepname)
         pass
+
     def get_layers_to_debug(self, env, net, state):
         # Subclasses should populate self.layers with a list of per-layer nn.Modules here.
         pass
 
-
     def before_step(self, opt, step_name, env, nets_to_train, pre_state):
         self.net, step = self.get_network_and_step_names()
-        self.activate = self.net in nets_to_train and step == step_name and self.step_num % opt['logger']['print_freq'] == 0
+        self.activate = (
+            self.net in nets_to_train
+            and step == step_name
+            and self.step_num % opt["logger"]["print_freq"] == 0
+        )
         if self.activate:
-            layers = self.get_layers_to_debug(env, env['networks'][self.net], pre_state)
+            layers = self.get_layers_to_debug(env, env["networks"][self.net], pre_state)
             self.params = []
             for l in layers:
                 lparams = []
-                for k, v in env['networks'][self.net].named_parameters():  # can optimize for a part of the model
+                for k, v in env["networks"][
+                    self.net
+                ].named_parameters():  # can optimize for a part of the model
                     if v.requires_grad:
                         lparams.append(v)
                 self.params.append(lparams)
@@ -61,7 +68,7 @@ class ModelParameterDepthTrackerMetrics(Experiment):
             self.layer_means.append(sum / len(l))
 
     def get_log_data(self):
-        return {'%s_layer_update_means_histogram' % (self.net,): self.layer_means}
+        return {"%s_layer_update_means_histogram" % (self.net,): self.layer_means}
 
 
 class DiscriminatorParameterTracker(ModelParameterDepthTrackerMetrics):
@@ -69,15 +76,17 @@ class DiscriminatorParameterTracker(ModelParameterDepthTrackerMetrics):
         return "feature_discriminator", "feature_discriminator"
 
     def get_layers_to_debug(self, env, net, state):
-        return [net.ref_head.conv0_0,
-                net.ref_head.conv0_1,
-                net.ref_head.conv1_0,
-                net.ref_head.conv1_1,
-                net.ref_head.conv2_0,
-                net.ref_head.conv2_1,
-                net.ref_head.conv3_0,
-                net.ref_head.conv3_1,
-                net.ref_head.conv4_0,
-                net.ref_head.conv4_1,
-                net.linear1,
-                net.output_linears]
+        return [
+            net.ref_head.conv0_0,
+            net.ref_head.conv0_1,
+            net.ref_head.conv1_0,
+            net.ref_head.conv1_1,
+            net.ref_head.conv2_0,
+            net.ref_head.conv2_1,
+            net.ref_head.conv3_0,
+            net.ref_head.conv3_1,
+            net.ref_head.conv4_0,
+            net.ref_head.conv4_1,
+            net.linear1,
+            net.output_linears,
+        ]

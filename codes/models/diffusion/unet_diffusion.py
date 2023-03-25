@@ -37,7 +37,7 @@ class AttentionPool2d(nn.Module):
     ):
         super().__init__()
         self.positional_embedding = nn.Parameter(
-            th.randn(embed_dim, spacial_dim ** 2 + 1) / embed_dim ** 0.5
+            th.randn(embed_dim, spacial_dim**2 + 1) / embed_dim**0.5
         )
         self.qkv_proj = conv_nd(1, embed_dim, 3 * embed_dim, 1)
         self.c_proj = conv_nd(1, embed_dim, output_dim or embed_dim, 1)
@@ -48,7 +48,9 @@ class AttentionPool2d(nn.Module):
         b, c, *_spatial = x.shape
         x = x.reshape(b, c, -1)  # NC(HW)
         x = th.cat([x.mean(dim=-1, keepdim=True), x], dim=-1)  # NC(HW+1)
-        x = x + self.positional_embedding[None, :, :x.shape[-1]].to(x.dtype)  # NC(HW+1)
+        x = x + self.positional_embedding[None, :, : x.shape[-1]].to(
+            x.dtype
+        )  # NC(HW+1)
         x = self.qkv_proj(x)
         x = self.attention(x)
         x = self.c_proj(x)
@@ -92,7 +94,9 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=3, pad=1):
+    def __init__(
+        self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=3, pad=1
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -109,7 +113,9 @@ class Upsample(nn.Module):
             if dims == 1:
                 ksize = 5
                 pad = 2
-            self.conv = conv_nd(dims, self.channels, self.out_channels, ksize, padding=pad)
+            self.conv = conv_nd(
+                dims, self.channels, self.out_channels, ksize, padding=pad
+            )
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -133,7 +139,16 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=None, pad=None):
+    def __init__(
+        self,
+        channels,
+        use_conv,
+        dims=2,
+        out_channels=None,
+        factor=None,
+        ksize=None,
+        pad=None,
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -152,12 +167,17 @@ class Downsample(nn.Module):
         elif dims == 2:
             stride = 2
         else:
-            stride = (1,2,2)
+            stride = (1, 2, 2)
         if factor is not None:
             stride = factor
         if use_conv:
             self.op = conv_nd(
-                dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad
+                dims,
+                self.channels,
+                self.out_channels,
+                ksize,
+                stride=stride,
+                padding=pad,
             )
         else:
             assert self.channels == self.out_channels
@@ -235,7 +255,13 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+                conv_nd(
+                    dims,
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size,
+                    padding=padding,
+                )
             ),
         )
 
@@ -256,9 +282,7 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, x, emb
-        )
+        return checkpoint(self._forward, x, emb)
 
     def _forward(self, x, emb):
         if self.updown:
@@ -351,7 +375,7 @@ def count_flops_attn(model, _x, y):
     # We perform two matmuls with the same number of ops.
     # The first computes the weight matrix, the second computes
     # the combination of the value vectors.
-    matmul_ops = 2 * b * (num_spatial ** 2) * c
+    matmul_ops = 2 * b * (num_spatial**2) * c
     model.total_ops += th.DoubleTensor([matmul_ops])
 
 
@@ -380,7 +404,9 @@ class QKVAttentionLegacy(nn.Module):
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
         if rel_pos is not None:
-            weight = rel_pos(weight.reshape(bs, self.n_heads, weight.shape[-2], weight.shape[-1])).reshape(bs * self.n_heads, weight.shape[-2], weight.shape[-1])
+            weight = rel_pos(
+                weight.reshape(bs, self.n_heads, weight.shape[-2], weight.shape[-1])
+            ).reshape(bs * self.n_heads, weight.shape[-2], weight.shape[-1])
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         if mask is not None:
             # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
@@ -519,7 +545,9 @@ class UNetModel(nn.Module):
             # nn.Embedding
             self.label_emb = mbnb.nn.Embedding(num_classes, time_embed_dim)
         self.use_raw_y_as_embedding = use_raw_y_as_embedding
-        assert not ((self.num_classes is not None) and use_raw_y_as_embedding)  # These are mutually-exclusive.
+        assert not (
+            (self.num_classes is not None) and use_raw_y_as_embedding
+        )  # These are mutually-exclusive.
 
         self.input_blocks = nn.ModuleList(
             [
@@ -700,13 +728,21 @@ class SuperResModel(UNetModel):
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         if corruption_factor is not None:
             if corruption_factor.shape[1] != self.num_corruptions:
-                if not hasattr(self, '_corruption_factor_warning'):
-                    print(f"Warning! Dataloader gave us {corruption_factor.shape[1]} dim but we are only processing {self.num_corruptions}. The last n corruptions will be truncated.")
+                if not hasattr(self, "_corruption_factor_warning"):
+                    print(
+                        f"Warning! Dataloader gave us {corruption_factor.shape[1]} dim but we are only processing {self.num_corruptions}. The last n corruptions will be truncated."
+                    )
                     self._corruption_factor_warning = True
-                corruption_factor = corruption_factor[:, :self.num_corruptions]
-            corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(1, 1, new_height, new_width)
+                corruption_factor = corruption_factor[:, : self.num_corruptions]
+            corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(
+                1, 1, new_height, new_width
+            )
         else:
-            corruption_factor = torch.zeros((b, self.num_corruptions, new_height, new_width), dtype=torch.float, device=x.device)
+            corruption_factor = torch.zeros(
+                (b, self.num_corruptions, new_height, new_width),
+                dtype=torch.float,
+                device=x.device,
+            )
         upsampled = torch.cat([upsampled, corruption_factor], dim=1)
         x = th.cat([x, upsampled], dim=1)
         res = super().forward(x, timesteps, **kwargs)
@@ -908,18 +944,29 @@ class EncoderUNetModel(nn.Module):
             h = h.type(x.dtype)
             return self.out(h)
 
+
 @register_model
 def register_unet_diffusion(opt_net, opt):
-    return SuperResModel(**opt_net['args'])
+    return SuperResModel(**opt_net["args"])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     attention_ds = []
     for res in "16,8".split(","):
         attention_ds.append(128 // int(res))
-    srm = SuperResModel(image_size=128, in_channels=3, model_channels=64, out_channels=3, num_res_blocks=1, attention_resolutions=attention_ds, num_heads=4,
-                        num_heads_upsample=-1, use_scale_shift_norm=True)
-    x = torch.randn(1,3,128,128)
-    l = torch.randn(1,3,32,32)
+    srm = SuperResModel(
+        image_size=128,
+        in_channels=3,
+        model_channels=64,
+        out_channels=3,
+        num_res_blocks=1,
+        attention_resolutions=attention_ds,
+        num_heads=4,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=True,
+    )
+    x = torch.randn(1, 3, 128, 128)
+    l = torch.randn(1, 3, 32, 32)
     ts = torch.LongTensor([555])
     y = srm(x, ts, low_res=l)
     print(y.shape, y.mean(), y.std(), y.min(), y.max())

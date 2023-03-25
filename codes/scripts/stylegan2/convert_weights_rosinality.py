@@ -13,17 +13,21 @@ import torch
 import numpy as np
 from torchvision import utils
 
-from models.image_generation.stylegan.stylegan2_rosinality import Generator, Discriminator
+from models.image_generation.stylegan.stylegan2_rosinality import (
+    Generator,
+    Discriminator,
+)
 
 
 # Converts from the TF state_dict input provided into the vars originally expected from the rosinality converter.
 def get_vars(vars, source_name):
-    net_name = source_name.split('/')[0]
-    vars_as_tuple_list = vars[net_name]['variables']
+    net_name = source_name.split("/")[0]
+    vars_as_tuple_list = vars[net_name]["variables"]
     result_vars = {}
     for t in vars_as_tuple_list:
         result_vars[t[0]] = t[1]
     return result_vars, source_name.replace(net_name + "/", "")
+
 
 def get_vars_direct(vars, source_name):
     v, n = get_vars(vars, source_name)
@@ -128,7 +132,7 @@ def discriminator_fill_statedict(statedict, vars, size):
     conv_i = 1
 
     for i in range(log_size - 2, 0, -1):
-        reso = 4 * 2 ** i
+        reso = 4 * 2**i
         update(
             statedict,
             convert_conv(vars, f"D/{reso}x{reso}/Conv0", f"convs.{conv_i}.conv1"),
@@ -142,7 +146,11 @@ def discriminator_fill_statedict(statedict, vars, size):
         update(
             statedict,
             convert_conv(
-                vars, f"D/{reso}x{reso}/Skip", f"convs.{conv_i}.skip", start=1, bias=False
+                vars,
+                f"D/{reso}x{reso}/Skip",
+                f"convs.{conv_i}.skip",
+                start=1,
+                bias=False,
             ),
         )
         conv_i += 1
@@ -235,7 +243,7 @@ if __name__ == "__main__":
     parser.add_argument("path", metavar="PATH", help="path to the tensorflow weights")
 
     args = parser.parse_args()
-    sys.path.append('scripts\\stylegan2')
+    sys.path.append("scripts\\stylegan2")
 
     from dnnlib.tflib.network import generator, discriminator, gen_ema
 
@@ -243,7 +251,7 @@ if __name__ == "__main__":
         pickle.load(f)
 
     # Weight names are ordered by size. The last name will be something like '1024x1024/<blah>'. We just need to grab that first number.
-    size = int(generator['G_synthesis']['variables'][-1][0].split('x')[0])
+    size = int(generator["G_synthesis"]["variables"][-1][0].split("x")[0])
 
     g = Generator(size, 512, 8, channel_multiplier=args.channel_multiplier)
     state_dict = g.state_dict()
@@ -254,7 +262,6 @@ if __name__ == "__main__":
     dstate_dict = d.state_dict()
     dstate_dict = discriminator_fill_statedict(dstate_dict, discriminator, size)
     d.load_state_dict(dstate_dict, strict=True)
-
 
     latent_avg = torch.from_numpy(get_vars_direct(gen_ema, "G/dlatent_avg"))
 

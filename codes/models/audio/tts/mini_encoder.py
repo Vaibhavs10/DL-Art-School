@@ -4,7 +4,13 @@ import maybe_bnb as mbnb
 
 
 from models.diffusion.nn import normalization, conv_nd, zero_module
-from models.diffusion.unet_diffusion import Downsample, AttentionBlock, QKVAttention, QKVAttentionLegacy, Upsample
+from models.diffusion.unet_diffusion import (
+    Downsample,
+    AttentionBlock,
+    QKVAttention,
+    QKVAttentionLegacy,
+    Upsample,
+)
 
 # Combined resnet & full-attention encoder for converting an audio clip into an embedding.
 from trainer.networks import register_model
@@ -56,7 +62,13 @@ class ResBlock(nn.Module):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+                conv_nd(
+                    dims,
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size,
+                    padding=padding,
+                )
             ),
         )
 
@@ -71,9 +83,7 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         if self.do_checkpoint:
-            return checkpoint(
-                self._forward, x
-            )
+            return checkpoint(self._forward, x)
         else:
             return self._forward(x)
 
@@ -91,38 +101,54 @@ class ResBlock(nn.Module):
 
 
 class AudioMiniEncoder(nn.Module):
-    def __init__(self,
-                 spec_dim,
-                 embedding_dim,
-                 base_channels=128,
-                 depth=2,
-                 resnet_blocks=2,
-                 attn_blocks=4,
-                 num_attn_heads=4,
-                 dropout=0,
-                 downsample_factor=2,
-                 kernel_size=3):
+    def __init__(
+        self,
+        spec_dim,
+        embedding_dim,
+        base_channels=128,
+        depth=2,
+        resnet_blocks=2,
+        attn_blocks=4,
+        num_attn_heads=4,
+        dropout=0,
+        downsample_factor=2,
+        kernel_size=3,
+    ):
         super().__init__()
-        self.init = nn.Sequential(
-            conv_nd(1, spec_dim, base_channels, 3, padding=1)
-        )
+        self.init = nn.Sequential(conv_nd(1, spec_dim, base_channels, 3, padding=1))
         ch = base_channels
         res = []
         self.layers = depth
         for l in range(depth):
             for r in range(resnet_blocks):
-                res.append(ResBlock(ch, dropout, dims=1, do_checkpoint=False, kernel_size=kernel_size))
-            res.append(Downsample(ch, use_conv=True, dims=1, out_channels=ch*2, factor=downsample_factor))
+                res.append(
+                    ResBlock(
+                        ch,
+                        dropout,
+                        dims=1,
+                        do_checkpoint=False,
+                        kernel_size=kernel_size,
+                    )
+                )
+            res.append(
+                Downsample(
+                    ch,
+                    use_conv=True,
+                    dims=1,
+                    out_channels=ch * 2,
+                    factor=downsample_factor,
+                )
+            )
             ch *= 2
         self.res = nn.Sequential(*res)
         self.final = nn.Sequential(
-            normalization(ch),
-            nn.SiLU(),
-            conv_nd(1, ch, embedding_dim, 1)
+            normalization(ch), nn.SiLU(), conv_nd(1, ch, embedding_dim, 1)
         )
         attn = []
         for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=False))
+            attn.append(
+                AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=False)
+            )
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
 
@@ -153,8 +179,12 @@ class AudioMiniEncoderWithClassifierHead(nn.Module):
                 oh_labels = nn.functional.one_hot(labels, num_classes=self.num_classes)
                 zeros_indices = (labels == 0).unsqueeze(-1)
                 # Distribute 20% of the probability mass on all classes when zero is specified, to compensate for dataset noise.
-                zero_extra_mass = torch.full_like(oh_labels, dtype=torch.float, fill_value=.2/(self.num_classes-1))
-                zero_extra_mass[:, 0] = -.2
+                zero_extra_mass = torch.full_like(
+                    oh_labels,
+                    dtype=torch.float,
+                    fill_value=0.2 / (self.num_classes - 1),
+                )
+                zero_extra_mass[:, 0] = -0.2
                 zero_extra_mass = zero_extra_mass * zeros_indices
                 oh_labels = oh_labels + zero_extra_mass
             else:
@@ -167,6 +197,7 @@ class QueryProvidedAttentionBlock(nn.Module):
     """
     An attention block that provides a separate signal for the query vs the keys/parameters.
     """
+
     def __init__(
         self,
         channels,
@@ -186,7 +217,7 @@ class QueryProvidedAttentionBlock(nn.Module):
         self.norm = normalization(channels)
         self.q = mbnb.nn.Linear(channels, channels)
         self.qnorm = nn.LayerNorm(channels)
-        self.kv = conv_nd(1, channels, channels*2, 1)
+        self.kv = conv_nd(1, channels, channels * 2, 1)
         if use_new_attention_order:
             # split qkv before split heads
             self.attention = QKVAttention(self.num_heads)
@@ -200,26 +231,40 @@ class QueryProvidedAttentionBlock(nn.Module):
         return checkpoint(self._forward, qx, kvx, mask)
 
     def _forward(self, qx, kvx, mask=None):
-        q = self.q(self.qnorm(qx)).unsqueeze(1).repeat(1, kvx.shape[1], 1).permute(0,2,1)
-        kv = self.kv(self.norm(kvx.permute(0,2,1)))
+        q = (
+            self.q(self.qnorm(qx))
+            .unsqueeze(1)
+            .repeat(1, kvx.shape[1], 1)
+            .permute(0, 2, 1)
+        )
+        kv = self.kv(self.norm(kvx.permute(0, 2, 1)))
         qkv = torch.cat([q, kv], dim=1)
         h = self.attention(qkv, mask)
         h = self.proj_out(h)
-        return kvx + h.permute(0,2,1)
+        return kvx + h.permute(0, 2, 1)
 
 
 # Next up: combine multiple embeddings given a conditioning signal into a single embedding.
 class EmbeddingCombiner(nn.Module):
-    def __init__(self, embedding_dim, attn_blocks=3, num_attn_heads=2, cond_provided=True):
+    def __init__(
+        self, embedding_dim, attn_blocks=3, num_attn_heads=2, cond_provided=True
+    ):
         super().__init__()
         block = QueryProvidedAttentionBlock if cond_provided else AttentionBlock
-        self.attn = nn.ModuleList([block(embedding_dim, num_attn_heads) for _ in range(attn_blocks)])
+        self.attn = nn.ModuleList(
+            [block(embedding_dim, num_attn_heads) for _ in range(attn_blocks)]
+        )
         self.cond_provided = cond_provided
 
     # x_s: (b,n,d); b=batch_sz, n=number of embeddings, d=embedding_dim
     # cond: (b,d) or None
     def forward(self, x_s, attn_mask=None, cond=None):
-        assert cond is not None and self.cond_provided or cond is None and not self.cond_provided
+        assert (
+            cond is not None
+            and self.cond_provided
+            or cond is None
+            and not self.cond_provided
+        )
         y = x_s
         for blk in self.attn:
             if self.cond_provided:
@@ -231,11 +276,11 @@ class EmbeddingCombiner(nn.Module):
 
 @register_model
 def register_mini_audio_encoder_classifier(opt_net, opt):
-    return AudioMiniEncoderWithClassifierHead(**opt_get(opt_net, ['kwargs'], {}))
+    return AudioMiniEncoderWithClassifierHead(**opt_get(opt_net, ["kwargs"], {}))
 
 
-if __name__ == '__main__':
-    '''
+if __name__ == "__main__":
+    """
     x = torch.randn(2, 80, 223)
     cond = torch.randn(2, 512)
     encs = [AudioMiniEncoder(80, 512) for _ in range(5)]
@@ -244,7 +289,7 @@ if __name__ == '__main__':
     e = torch.stack([e(x) for e in encs], dim=2)
 
     print(combiner(e, cond).shape)
-    '''
+    """
     x = torch.randn(2, 80, 223)
     m = AudioMiniEncoderWithClassifierHead(4, 80, 512)
     print(m(x).shape)

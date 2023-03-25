@@ -11,34 +11,35 @@ from pykeops.torch import LazyTensor
 
 use_cuda = False
 dtype = torch.float32
-device_id = 'cpu'
+device_id = "cpu"
 
 
 def load_vectors():
-    """ Will need to be modified per-data type you are loading. """
-    all_files = torch.load('/y/separated/large_mel_cheaters_linux.pth')
-    os.makedirs('/y/separated/randomly_sampled_cheaters', exist_ok=True)
+    """Will need to be modified per-data type you are loading."""
+    all_files = torch.load("/y/separated/large_mel_cheaters_linux.pth")
+    os.makedirs("/y/separated/randomly_sampled_cheaters", exist_ok=True)
     vecs = []
     print("Gathering vectors..")
     j = 0
     for f in tqdm(all_files):
-        vs=torch.tensor(np.load(f)['arr_0'])
+        vs = torch.tensor(np.load(f)["arr_0"])
         for k in range(4):
-            vecs.append(vs[0,:,random.randint(0,vs.shape[-1]-1)])
+            vecs.append(vs[0, :, random.randint(0, vs.shape[-1] - 1)])
         if len(vecs) >= 1000000:
             vecs = torch.stack(vecs, dim=0)
-            torch.save(vecs, f'/y/separated/randomly_sampled_cheaters/{j}.pth')
+            torch.save(vecs, f"/y/separated/randomly_sampled_cheaters/{j}.pth")
             j += 1
             vecs = []
     vecs = [torch.stack(vecs, dim=0)]
     for i in range(j):
-        vecs.append(torch.load(f'/y/separated/randomly_sampled_cheaters/{i}.pth'))
+        vecs.append(torch.load(f"/y/separated/randomly_sampled_cheaters/{i}.pth"))
     vecs = torch.cat(vecs, dim=0)
-    torch.save(vecs, '/y/separated/randomly_sampled_cheaters/combined.pth')
+    torch.save(vecs, "/y/separated/randomly_sampled_cheaters/combined.pth")
+
 
 def k_means(x, K, Niter=10, verbose=True):
     """Implements Lloyd's algorithm for the Euclidean metric.
-       Thanks to https://www.kernel-operations.io/keops/_auto_tutorials/kmeans/plot_kmeans_torch.html
+    Thanks to https://www.kernel-operations.io/keops/_auto_tutorials/kmeans/plot_kmeans_torch.html
     """
 
     start = time.time()
@@ -54,7 +55,6 @@ def k_means(x, K, Niter=10, verbose=True):
     # - cl is the (N,) vector of class labels
     # - c  is the (K, D) cloud of cluster centroids
     for i in tqdm(range(Niter)):
-
         # E step: assign points to the closest cluster -------------------------
         D_ij = ((x_i - c_j) ** 2).sum(-1)  # (N, K) symbolic squared distances
         cl = D_ij.argmin(dim=1).long().view(-1)  # Points -> Nearest cluster
@@ -81,11 +81,11 @@ def k_means(x, K, Niter=10, verbose=True):
             )
         )
 
-    return cl, c    
+    return cl, c
 
 
-if __name__ == '__main__':
-    #load_vectors()
-    vecs = torch.load('/y/separated/randomly_sampled_cheaters/combined.pth')
+if __name__ == "__main__":
+    # load_vectors()
+    vecs = torch.load("/y/separated/randomly_sampled_cheaters/combined.pth")
     cl, c = k_means(vecs, 8192, 50)
-    torch.save((cl, c), '/y/separated/randomly_sampled_cheaters/k_means_clusters.pth')
+    torch.save((cl, c), "/y/separated/randomly_sampled_cheaters/k_means_clusters.pth")

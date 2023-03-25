@@ -1,6 +1,17 @@
-from models.diffusion.nn import timestep_embedding, normalization, zero_module, conv_nd, linear
-from models.diffusion.unet_diffusion import AttentionBlock, ResBlock, TimestepEmbedSequential, \
-    Downsample, Upsample
+from models.diffusion.nn import (
+    timestep_embedding,
+    normalization,
+    zero_module,
+    conv_nd,
+    linear,
+)
+from models.diffusion.unet_diffusion import (
+    AttentionBlock,
+    ResBlock,
+    TimestepEmbedSequential,
+    Downsample,
+    Upsample,
+)
 import torch
 import torch.nn as nn
 
@@ -11,10 +22,12 @@ from trainer.networks import register_model
 class DiscreteSpectrogramConditioningBlock(nn.Module):
     def __init__(self, dvae_channels, channels, level):
         super().__init__()
-        self.intg = nn.Sequential(nn.Conv1d(dvae_channels, channels, kernel_size=1),
-                                  normalization(channels),
-                                  nn.SiLU(),
-                                  nn.Conv1d(channels, channels, kernel_size=3))
+        self.intg = nn.Sequential(
+            nn.Conv1d(dvae_channels, channels, kernel_size=1),
+            normalization(channels),
+            nn.SiLU(),
+            nn.Conv1d(channels, channels, kernel_size=3),
+        )
         self.level = level
 
     """
@@ -23,11 +36,12 @@ class DiscreteSpectrogramConditioningBlock(nn.Module):
     :param x: bxcxS waveform latent
     :param codes: bxN discrete codes, N <= S
     """
+
     def forward(self, x, dvae_in):
         b, c, S = x.shape
         _, q, N = dvae_in.shape
         emb = self.intg(dvae_in)
-        emb = nn.functional.interpolate(emb, size=(S,), mode='nearest')
+        emb = nn.functional.interpolate(emb, size=(S,), mode="nearest")
         return torch.cat([x, emb], dim=1)
 
 
@@ -63,34 +77,34 @@ class DiffusionVocoderWithRef(nn.Module):
     """
 
     def __init__(
-            self,
-            model_channels,
-            in_channels=1,
-            out_channels=2,  # mean and variance
-            discrete_codes=512,
-            dropout=0,
-            # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
-            channel_mult=  (1,1.5,2, 3, 4, 6, 8, 12, 16, 24, 32, 48),
-            num_res_blocks=(1, 1, 1, 1, 1, 2, 2, 2,   2,  2,  2,  2),
-            # spec_cond:    1, 0, 0, 1, 0, 0, 1, 0,   0,  1,  0,  0)
-            # attn:         0, 0, 0, 0, 0, 0, 0, 0,   0,  1,  1,  1
-            spectrogram_conditioning_resolutions=(512,),
-            attention_resolutions=(512,1024,2048),
-            conv_resample=True,
-            dims=1,
-            use_fp16=False,
-            num_heads=1,
-            num_head_channels=-1,
-            num_heads_upsample=-1,
-            use_scale_shift_norm=False,
-            resblock_updown=False,
-            use_new_attention_order=False,
-            kernel_size=3,
-            scale_factor=2,
-            conditioning_inputs_provided=True,
-            conditioning_input_dim=80,
-            time_embed_dim_multiplier=4,
-            freeze_layers_below=None,  # powers of 2; ex: 1,2,4,8,16,32,etc..
+        self,
+        model_channels,
+        in_channels=1,
+        out_channels=2,  # mean and variance
+        discrete_codes=512,
+        dropout=0,
+        # res           1, 2, 4, 8,16,32,64,128,256,512, 1K, 2K
+        channel_mult=(1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48),
+        num_res_blocks=(1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2),
+        # spec_cond:    1, 0, 0, 1, 0, 0, 1, 0,   0,  1,  0,  0)
+        # attn:         0, 0, 0, 0, 0, 0, 0, 0,   0,  1,  1,  1
+        spectrogram_conditioning_resolutions=(512,),
+        attention_resolutions=(512, 1024, 2048),
+        conv_resample=True,
+        dims=1,
+        use_fp16=False,
+        num_heads=1,
+        num_head_channels=-1,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=False,
+        resblock_updown=False,
+        use_new_attention_order=False,
+        kernel_size=3,
+        scale_factor=2,
+        conditioning_inputs_provided=True,
+        conditioning_input_dim=80,
+        time_embed_dim_multiplier=4,
+        freeze_layers_below=None,  # powers of 2; ex: 1,2,4,8,16,32,etc..
     ):
         super().__init__()
 
@@ -121,8 +135,18 @@ class DiffusionVocoderWithRef(nn.Module):
 
         self.conditioning_enabled = conditioning_inputs_provided
         if conditioning_inputs_provided:
-            self.contextual_embedder = AudioMiniEncoder(in_channels, time_embed_dim, base_channels=32, depth=6, resnet_blocks=1,
-                             attn_blocks=2, num_attn_heads=2, dropout=dropout, downsample_factor=4, kernel_size=5)
+            self.contextual_embedder = AudioMiniEncoder(
+                in_channels,
+                time_embed_dim,
+                base_channels=32,
+                depth=6,
+                resnet_blocks=1,
+                attn_blocks=2,
+                num_attn_heads=2,
+                dropout=dropout,
+                downsample_factor=4,
+                kernel_size=5,
+            )
 
         seqlyr = TimestepEmbedSequential(
             conv_nd(dims, in_channels, model_channels, kernel_size, padding=padding)
@@ -137,7 +161,9 @@ class DiffusionVocoderWithRef(nn.Module):
 
         for level, (mult, num_blocks) in enumerate(zip(channel_mult, num_res_blocks)):
             if ds in spectrogram_conditioning_resolutions:
-                spec_cond_block = DiscreteSpectrogramConditioningBlock(discrete_codes, ch, 2 ** level)
+                spec_cond_block = DiscreteSpectrogramConditioningBlock(
+                    discrete_codes, ch, 2**level
+                )
                 self.input_blocks.append(spec_cond_block)
                 spectrogram_blocks.append(spec_cond_block)
                 ch *= 2
@@ -165,29 +191,33 @@ class DiffusionVocoderWithRef(nn.Module):
                         )
                     )
                 layer = TimestepEmbedSequential(*layers)
-                layer.level = 2 ** level
+                layer.level = 2**level
                 self.input_blocks.append(layer)
                 self._feature_size += ch
                 input_block_chans.append(ch)
             if level != len(channel_mult) - 1:
                 out_ch = ch
                 upblk = TimestepEmbedSequential(
-                        ResBlock(
-                            ch,
-                            time_embed_dim,
-                            dropout,
-                            out_channels=out_ch,
-                            dims=dims,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                            down=True,
-                            kernel_size=kernel_size,
-                        )
-                        if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor
-                        )
+                    ResBlock(
+                        ch,
+                        time_embed_dim,
+                        dropout,
+                        out_channels=out_ch,
+                        dims=dims,
+                        use_scale_shift_norm=use_scale_shift_norm,
+                        down=True,
+                        kernel_size=kernel_size,
                     )
-                upblk.level = 2 ** level
+                    if resblock_updown
+                    else Downsample(
+                        ch,
+                        conv_resample,
+                        dims=dims,
+                        out_channels=out_ch,
+                        factor=scale_factor,
+                    )
+                )
+                upblk.level = 2**level
                 self.input_blocks.append(upblk)
                 ch = out_ch
                 input_block_chans.append(ch)
@@ -221,7 +251,9 @@ class DiffusionVocoderWithRef(nn.Module):
         self._feature_size += ch
 
         self.output_blocks = nn.ModuleList([])
-        for level, (mult, num_blocks) in list(enumerate(zip(channel_mult, num_res_blocks)))[::-1]:
+        for level, (mult, num_blocks) in list(
+            enumerate(zip(channel_mult, num_res_blocks))
+        )[::-1]:
             for i in range(num_blocks + 1):
                 ich = input_block_chans.pop()
                 layers = [
@@ -259,18 +291,28 @@ class DiffusionVocoderWithRef(nn.Module):
                             kernel_size=kernel_size,
                         )
                         if resblock_updown
-                        else Upsample(ch, conv_resample, dims=dims, out_channels=out_ch, factor=scale_factor)
+                        else Upsample(
+                            ch,
+                            conv_resample,
+                            dims=dims,
+                            out_channels=out_ch,
+                            factor=scale_factor,
+                        )
                     )
                     ds //= 2
                 layer = TimestepEmbedSequential(*layers)
-                layer.level = 2 ** level
+                layer.level = 2**level
                 self.output_blocks.append(layer)
                 self._feature_size += ch
 
         self.out = nn.Sequential(
             normalization(ch),
             nn.SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, kernel_size, padding=padding)),
+            zero_module(
+                conv_nd(
+                    dims, model_channels, out_channels, kernel_size, padding=padding
+                )
+            ),
         )
 
         if freeze_layers_below is not None:
@@ -297,7 +339,9 @@ class DiffusionVocoderWithRef(nn.Module):
                     del p.DO_NOT_TRAIN
                     p.requires_grad = True
                     unfrozen_params += 1
-            print(f"freeze_layers_below specified. Training a total of {unfrozen_params} parameters.")
+            print(
+                f"freeze_layers_below specified. Training a total of {unfrozen_params} parameters."
+            )
 
     def forward(self, x, timesteps, spectrogram, conditioning_input=None):
         """
@@ -308,7 +352,9 @@ class DiffusionVocoderWithRef(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert x.shape[-1] % 2048 == 0  # This model operates at base//2048 at it's bottom levels, thus this requirement.
+        assert (
+            x.shape[-1] % 2048 == 0
+        )  # This model operates at base//2048 at it's bottom levels, thus this requirement.
         if self.conditioning_enabled:
             assert conditioning_input is not None
 
@@ -341,12 +387,12 @@ def move_all_layers_down(pretrained_path, output_path, layers_to_be_added=3):
     out = sd.copy()
     replaced = []
     for n, p in sd.items():
-        if n.startswith('input_blocks.') and not n.startswith('input_blocks.0.'):
+        if n.startswith("input_blocks.") and not n.startswith("input_blocks.0."):
             if n not in replaced:
                 del out[n]
-            components = n.split('.')
+            components = n.split(".")
             components[1] = str(int(components[1]) + layers_to_be_added)
-            new_name = '.'.join(components)
+            new_name = ".".join(components)
             out[new_name] = p
             replaced.append(new_name)
     torch.save(out, output_path)
@@ -354,29 +400,42 @@ def move_all_layers_down(pretrained_path, output_path, layers_to_be_added=3):
 
 @register_model
 def register_unet_diffusion_vocoder_with_ref(opt_net, opt):
-    return DiffusionVocoderWithRef(**opt_net['kwargs'])
+    return DiffusionVocoderWithRef(**opt_net["kwargs"])
 
 
 # Test for ~4 second audio clip at 22050Hz
-if __name__ == '__main__':
-    path = 'X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth'
-    move_all_layers_down(path, 'diffuse_new_lyr.pth', layers_to_be_added=2)
+if __name__ == "__main__":
+    path = "X:\\dlas\\experiments\\train_diffusion_vocoder_with_cond_new_dvae_full\\models\\6100_generator_ema.pth"
+    move_all_layers_down(path, "diffuse_new_lyr.pth", layers_to_be_added=2)
 
     clip = torch.randn(2, 1, 40960)
-    spec = torch.randn(2,80,160)
+    spec = torch.randn(2, 80, 160)
     cond = torch.randn(2, 1, 40960)
     ts = torch.LongTensor([555, 556])
-    model = DiffusionVocoderWithRef(model_channels=128, channel_mult=[1,1,1.5,2, 3, 4, 6, 8, 8,   8,  8 ],
-                                    num_res_blocks=[1,2, 2, 2, 2, 2, 2, 2, 2,   1,  1 ], spectrogram_conditioning_resolutions=[2,512],
-                                    dropout=.05, attention_resolutions=[512,1024], num_heads=4, kernel_size=3, scale_factor=2,
-                                    conditioning_inputs_provided=True, conditioning_input_dim=80, time_embed_dim_multiplier=4,
-                                    discrete_codes=80, freeze_layers_below=1)
-    loading_errors = model.load_state_dict(torch.load('diffuse_new_lyr.pth'), strict=False)
+    model = DiffusionVocoderWithRef(
+        model_channels=128,
+        channel_mult=[1, 1, 1.5, 2, 3, 4, 6, 8, 8, 8, 8],
+        num_res_blocks=[1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1],
+        spectrogram_conditioning_resolutions=[2, 512],
+        dropout=0.05,
+        attention_resolutions=[512, 1024],
+        num_heads=4,
+        kernel_size=3,
+        scale_factor=2,
+        conditioning_inputs_provided=True,
+        conditioning_input_dim=80,
+        time_embed_dim_multiplier=4,
+        discrete_codes=80,
+        freeze_layers_below=1,
+    )
+    loading_errors = model.load_state_dict(
+        torch.load("diffuse_new_lyr.pth"), strict=False
+    )
     new_params = loading_errors.missing_keys
     new_params_trained = []
     existing_params_trained = []
-    for n,p in model.named_parameters():
-        if not hasattr(p, 'DO_NOT_TRAIN'):
+    for n, p in model.named_parameters():
+        if not hasattr(p, "DO_NOT_TRAIN"):
             if n in new_params:
                 new_params_trained.append(n)
             else:

@@ -12,12 +12,16 @@ def detach_variable(inputs):
         return tuple(out)
     else:
         raise RuntimeError(
-            "Only tuple of tensors is supported. Got Unsupported input type: ", type(inputs).__name__)
+            "Only tuple of tensors is supported. Got Unsupported input type: ",
+            type(inputs).__name__,
+        )
 
 
 def check_backward_validity(inputs):
     if not any(inp.requires_grad for inp in inputs):
-        warnings.warn("None of the inputs have requires_grad=True. Gradients will be None")
+        warnings.warn(
+            "None of the inputs have requires_grad=True. Gradients will be None"
+        )
 
 
 class CheckpointFunction(torch.autograd.Function):
@@ -38,12 +42,19 @@ class CheckpointFunction(torch.autograd.Function):
             ctx.input_tensors[i].requires_grad = temp.requires_grad
         with torch.enable_grad():
             output_tensors = ctx.run_function(*ctx.input_tensors)
-        input_grads = torch.autograd.grad(output_tensors, ctx.input_tensors + ctx.input_params, output_grads, allow_unused=True)
+        input_grads = torch.autograd.grad(
+            output_tensors,
+            ctx.input_tensors + ctx.input_params,
+            output_grads,
+            allow_unused=True,
+        )
         return (None, None) + input_grads
 
 
 def checkpoint(module, *params):
-    differentiable_params = tuple(filter(lambda p: p.requires_grad, module.parameters()))
+    differentiable_params = tuple(
+        filter(lambda p: p.requires_grad, module.parameters())
+    )
     if len(differentiable_params) > 0:
         args = params + differentiable_params
         return CheckpointFunction.apply(module, len(params), *args)

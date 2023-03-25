@@ -22,7 +22,9 @@ output_location = "results"
 def update_mode_label():
     global widgets, mode_select_image_1, img_count
     image_widget_1, image_widget_2, mode_label = widgets
-    mode_str = "Select point in image 1" if mode_select_image_1 else "Select point in image 2"
+    mode_str = (
+        "Select point in image 1" if mode_select_image_1 else "Select point in image 2"
+    )
     mode_label.config(text="%s; Saved images: %i" % (mode_str, img_count))
 
 
@@ -30,7 +32,7 @@ def update_mode_label():
 def key_press(event):
     global batch_gen, labeler, pending_labels
 
-    if event.char == '\t':
+    if event.char == "\t":
         next_images()
 
     update_mode_label()
@@ -48,11 +50,11 @@ def click(event):
         img_loc_1 = x, y
         mode_select_image_1 = False
     else:
-        ofolder = f'{output_location}/{img_count}'
+        ofolder = f"{output_location}/{img_count}"
         os.makedirs(ofolder)
         pil_img_1.save(os.path.join(ofolder, "1.jpg"))
         pil_img_2.save(os.path.join(ofolder, "2.jpg"))
-        torch.save([img_loc_1, (x,y)], os.path.join(ofolder, "coords.pth"))
+        torch.save([img_loc_1, (x, y)], os.path.join(ofolder, "coords.pth"))
         img_count = img_count + 1
         mode_select_image_1 = True
         next_images()
@@ -61,11 +63,12 @@ def click(event):
 
 def load_image_into_pane(img_path, pane, size=512):
     pil_img = Image.open(img_path)
-    pil_img = pil_img.resize((size,size))
+    pil_img = pil_img.resize((size, size))
     tk_picture = ImageTk.PhotoImage(pil_img)
     pane.image = tk_picture
     pane.configure(image=tk_picture)
     return pil_img
+
 
 def next_images():
     global imgs_list, widgets, cur_img_1, cur_img_2, pil_img_1, pil_img_2
@@ -75,15 +78,18 @@ def next_images():
     pil_img_1 = load_image_into_pane(cur_img_1, image_widget_1)
     pil_img_2 = load_image_into_pane(cur_img_2, image_widget_2)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     os.makedirs(output_location, exist_ok=True)
 
     window = tk.Tk()
     window.title("Image pair labeler UI")
-    window.geometry('1024x620+100+100')
+    window.geometry("1024x620+100+100")
 
     # Load images
-    imgs_list = glob("E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new\\*.jpg")
+    imgs_list = glob(
+        "E:\\4k6k\\datasets\\ns_images\\imagesets\\imageset_1024_square_with_new\\*.jpg"
+    )
 
     # Photo view.
     image_widget_1 = tk.Label(window)

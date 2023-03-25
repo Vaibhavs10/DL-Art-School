@@ -9,12 +9,13 @@ from trainer.networks import register_model
 from utils.util import opt_get
 
 
-def fused_leaky_relu(input, bias=None, negative_slope=0.2, scale=2 ** 0.5):
+def fused_leaky_relu(input, bias=None, negative_slope=0.2, scale=2**0.5):
     if bias is not None:
         rest_dim = [1] * (input.ndim - bias.ndim - 1)
         return (
             F.leaky_relu(
-                input + bias.view(1, bias.shape[0], *rest_dim), negative_slope=negative_slope
+                input + bias.view(1, bias.shape[0], *rest_dim),
+                negative_slope=negative_slope,
             )
             * scale
         )
@@ -23,9 +24,7 @@ def fused_leaky_relu(input, bias=None, negative_slope=0.2, scale=2 ** 0.5):
 
 
 class EqualLinear(nn.Module):
-    def __init__(
-        self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1
-    ):
+    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_dim, in_dim).div_(lr_mul))
         if bias:
@@ -44,8 +43,10 @@ class EqualLinear(nn.Module):
 class RandomLatentConverter(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.layers = nn.Sequential(*[EqualLinear(channels, channels, lr_mul=.1) for _ in range(5)],
-                                    mbnb.nn.Linear(channels, channels))
+        self.layers = nn.Sequential(
+            *[EqualLinear(channels, channels, lr_mul=0.1) for _ in range(5)],
+            mbnb.nn.Linear(channels, channels)
+        )
         self.channels = channels
 
     def forward(self, ref):
@@ -56,9 +57,9 @@ class RandomLatentConverter(nn.Module):
 
 @register_model
 def register_random_latent_converter(opt_net, opt):
-    return RandomLatentConverter(**opt_get(opt_net, ['kwargs'], {}))
+    return RandomLatentConverter(**opt_get(opt_net, ["kwargs"], {}))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = RandomLatentConverter(512)
-    model(torch.randn(5,512))
+    model(torch.randn(5, 512))

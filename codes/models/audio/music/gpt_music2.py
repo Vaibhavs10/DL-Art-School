@@ -11,30 +11,86 @@ from utils.util import opt_get, ceil_multiple, print_network
 
 
 class UpperEncoder(nn.Module):
-    def __init__(self,
-                 spec_dim,
-                 hidden_dim,
-                 embedding_dim,
-                 checkpointing_enabled=True,
-                 ):
+    def __init__(
+        self,
+        spec_dim,
+        hidden_dim,
+        embedding_dim,
+        checkpointing_enabled=True,
+    ):
         super().__init__()
         attn = []
+
         def edim(m):
             dd = min(spec_dim + m * 128, hidden_dim)
             return ceil_multiple(dd, 8)
+
         self.downsampler = nn.Sequential(
-            ResBlock(spec_dim, out_channels=edim(1), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
-            ResBlock(edim(1), out_channels=edim(2), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
-            ResBlock(edim(2), out_channels=edim(3), use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled),
-            ResBlock(edim(3), out_channels=edim(4), use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
-            ResBlock(edim(4), out_channels=hidden_dim, use_conv=True, dims=1, down=True, checkpointing_enabled=checkpointing_enabled))
+            ResBlock(
+                spec_dim,
+                out_channels=edim(1),
+                use_conv=True,
+                dims=1,
+                down=True,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
+            ResBlock(
+                edim(1),
+                out_channels=edim(2),
+                use_conv=True,
+                dims=1,
+                down=True,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
+            ResBlock(
+                edim(2),
+                out_channels=edim(3),
+                use_conv=True,
+                dims=1,
+                down=True,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
+            ResBlock(
+                edim(3),
+                out_channels=edim(4),
+                use_conv=True,
+                dims=1,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
+            ResBlock(
+                edim(4),
+                out_channels=hidden_dim,
+                use_conv=True,
+                dims=1,
+                down=True,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
+        )
         self.encoder = nn.Sequential(
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(
+                hidden_dim,
+                out_channels=hidden_dim,
+                use_conv=True,
+                dims=1,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(
+                hidden_dim,
+                out_channels=hidden_dim,
+                use_conv=True,
+                dims=1,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
             AttentionBlock(hidden_dim, 4, do_activation=True),
-            ResBlock(hidden_dim, out_channels=hidden_dim, use_conv=True, dims=1, checkpointing_enabled=checkpointing_enabled),
+            ResBlock(
+                hidden_dim,
+                out_channels=hidden_dim,
+                use_conv=True,
+                dims=1,
+                checkpointing_enabled=checkpointing_enabled,
+            ),
             nn.GroupNorm(8, hidden_dim),
             nn.SiLU(),
             nn.Conv1d(hidden_dim, embedding_dim, 1),
@@ -47,18 +103,37 @@ class UpperEncoder(nn.Module):
         return h
 
 
-    
-
 class GptMusicLower(nn.Module):
-    def __init__(self, dim, layers, encoder_out_dim, dropout=0, num_target_vectors=8192, fp16=True, num_vaes=4, vqargs={}):
+    def __init__(
+        self,
+        dim,
+        layers,
+        encoder_out_dim,
+        dropout=0,
+        num_target_vectors=8192,
+        fp16=True,
+        num_vaes=4,
+        vqargs={},
+    ):
         super().__init__()
         self.num_vaes = num_vaes
         self.start_token = nn.Parameter(torch.randn(1, 1, dim))
-        self.config = GPT2Config(vocab_size=1, n_positions=8192, n_embd=dim, n_layer=layers, n_head=dim//64,
-                                 n_inner=dim*2, attn_pdrop=dropout, resid_pdrop=dropout, gradient_checkpointing=True,
-                                 use_cache=False)
+        self.config = GPT2Config(
+            vocab_size=1,
+            n_positions=8192,
+            n_embd=dim,
+            n_layer=layers,
+            n_head=dim // 64,
+            n_inner=dim * 2,
+            attn_pdrop=dropout,
+            resid_pdrop=dropout,
+            gradient_checkpointing=True,
+            use_cache=False,
+        )
 
-        self.target_quantizers = nn.ModuleList([DiscreteVAE(**vqargs).eval() for _ in range(num_vaes)])
+        self.target_quantizers = nn.ModuleList(
+            [DiscreteVAE(**vqargs).eval() for _ in range(num_vaes)]
+        )
         self.upper_encoder = UpperEncoder(256, dim, encoder_out_dim)
         self.encoder_projector = nn.Conv1d(encoder_out_dim, dim, 1)
         self.fp16 = fp16
@@ -75,8 +150,15 @@ class GptMusicLower(nn.Module):
         del self.gpt.wte  # Unused, we'll do our own embeddings.
 
         # nn.Embedding
-        self.embeddings = nn.ModuleList([mbnb.nn.Embedding(num_target_vectors, dim // num_vaes) for _ in range(num_vaes)])
-        self.heads = nn.ModuleList([mbnb.nn.Linear(dim, num_target_vectors) for _ in range(num_vaes)])
+        self.embeddings = nn.ModuleList(
+            [
+                mbnb.nn.Embedding(num_target_vectors, dim // num_vaes)
+                for _ in range(num_vaes)
+            ]
+        )
+        self.heads = nn.ModuleList(
+            [mbnb.nn.Linear(dim, num_target_vectors) for _ in range(num_vaes)]
+        )
 
     def forward(self, mel, return_latent=False):
         unused_params = []
@@ -85,15 +167,15 @@ class GptMusicLower(nn.Module):
             codes = []
             partition_size = mel.shape[1] // len(self.target_quantizers)
             for i, q in enumerate(self.target_quantizers):
-                mel_partition = mel[:, i*partition_size:(i+1)*partition_size]
+                mel_partition = mel[:, i * partition_size : (i + 1) * partition_size]
                 codes.append(q.get_codebook_indices(mel_partition))
             codes = torch.stack(codes, dim=-1)
 
         upper_vector = self.upper_encoder(mel)
         upper_vector = self.encoder_projector(upper_vector)
         # WTB slerp
-        upper_vector = F.interpolate(upper_vector, size=codes.shape[1], mode='linear')
-        upper_vector = upper_vector.permute(0,2,1)
+        upper_vector = F.interpolate(upper_vector, size=codes.shape[1], mode="linear")
+        upper_vector = upper_vector.permute(0, 2, 1)
 
         inputs = codes[:, :-1]
         targets = codes
@@ -114,8 +196,8 @@ class GptMusicLower(nn.Module):
 
             losses = 0
             for i, head in enumerate(self.heads):
-                logits = head(h).permute(0,2,1)
-                loss = F.cross_entropy(logits, targets[:,:,i])
+                logits = head(h).permute(0, 2, 1)
+                loss = F.cross_entropy(logits, targets[:, :, i])
                 losses = losses + loss
 
         unused_adder = 0
@@ -127,37 +209,56 @@ class GptMusicLower(nn.Module):
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'gpt': list(self.gpt.parameters()),
-            'heads': list(self.heads.parameters()),
-            'embeddings': list(self.embeddings.parameters()),
-            'upper_latent_encoder': list(self.upper_encoder.encoder.parameters()),
-            'upper_latent_downsampler': list(self.upper_encoder.downsampler.parameters()),
+            "gpt": list(self.gpt.parameters()),
+            "heads": list(self.heads.parameters()),
+            "embeddings": list(self.embeddings.parameters()),
+            "upper_latent_encoder": list(self.upper_encoder.encoder.parameters()),
+            "upper_latent_downsampler": list(
+                self.upper_encoder.downsampler.parameters()
+            ),
         }
         return groups
 
 
 @register_model
 def register_music_gpt_lower2(opt_net, opt):
-    return GptMusicLower(**opt_get(opt_net, ['kwargs'], {}))
+    return GptMusicLower(**opt_get(opt_net, ["kwargs"], {}))
 
 
 def test_lower():
-    model = GptMusicLower(dim=1024, encoder_out_dim=256, layers=16, fp16=False, num_target_vectors=8192, num_vaes=4,
-                          vqargs= {'positional_dims': 1, 'channels': 64,
-            'hidden_dim': 512, 'num_resnet_blocks': 3, 'codebook_dim': 512, 'num_tokens': 8192,
-            'num_layers': 0, 'record_codes': True, 'kernel_size': 3, 'use_transposed_convs': False,
-                                                })
-    quants = ['X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_low\\models\\7500_generator.pth',
-              'X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_mid_low\\models\\11000_generator.pth',
-              'X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_mid_high\\models\\11500_generator.pth',
-              'X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_high\\models\\11500_generator.pth']
+    model = GptMusicLower(
+        dim=1024,
+        encoder_out_dim=256,
+        layers=16,
+        fp16=False,
+        num_target_vectors=8192,
+        num_vaes=4,
+        vqargs={
+            "positional_dims": 1,
+            "channels": 64,
+            "hidden_dim": 512,
+            "num_resnet_blocks": 3,
+            "codebook_dim": 512,
+            "num_tokens": 8192,
+            "num_layers": 0,
+            "record_codes": True,
+            "kernel_size": 3,
+            "use_transposed_convs": False,
+        },
+    )
+    quants = [
+        "X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_low\\models\\7500_generator.pth",
+        "X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_mid_low\\models\\11000_generator.pth",
+        "X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_mid_high\\models\\11500_generator.pth",
+        "X:\\dlas\\experiments\\music_vqvaes\\train_lrdvae_music_high\\models\\11500_generator.pth",
+    ]
     for i, qfile in enumerate(quants):
         quant_weights = torch.load(qfile)
         model.target_quantizers[i].load_state_dict(quant_weights, strict=False)
-    torch.save(model.state_dict(), 'sample.pth')
+    torch.save(model.state_dict(), "sample.pth")
     print_network(model)
 
-    mel = torch.randn(2,256,400)
+    mel = torch.randn(2, 256, 400)
     model(mel)
     pg = model.get_grad_norm_parameter_groups()
 
@@ -170,9 +271,9 @@ def test_lower():
                 m *= d
             s += m
         t += s
-        print(k, s/1000000)
-    print(t/1000000)
+        print(k, s / 1000000)
+    print(t / 1000000)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_lower()

@@ -21,14 +21,14 @@ def default(val, d):
 
 
 def l2norm(t):
-    return F.normalize(t, p = 2, dim = -1)
+    return F.normalize(t, p=2, dim=-1)
 
 
 def ema_inplace(moving_avg, new, decay):
-    moving_avg.data.mul_(decay).add_(new, alpha = (1 - decay))
+    moving_avg.data.mul_(decay).add_(new, alpha=(1 - decay))
 
 
-def laplace_smoothing(x, n_categories, eps = 1e-5):
+def laplace_smoothing(x, n_categories, eps=1e-5):
     return (x + eps) / (x.sum() + n_categories * eps)
 
 
@@ -36,27 +36,26 @@ def sample_vectors(samples, num):
     num_samples, device = samples.shape[0], samples.device
 
     if num_samples >= num:
-        indices = torch.randperm(num_samples, device = device)[:num]
+        indices = torch.randperm(num_samples, device=device)[:num]
     else:
-        indices = torch.randint(0, num_samples, (num,), device = device)
+        indices = torch.randint(0, num_samples, (num,), device=device)
 
     return samples[indices]
 
 
-def kaiming_init(module,
-                 a=0,
-                 mode='fan_out',
-                 nonlinearity='relu',
-                 bias=0,
-                 distribution='normal'):
-    assert distribution in ['uniform', 'normal']
-    if distribution == 'uniform':
+def kaiming_init(
+    module, a=0, mode="fan_out", nonlinearity="relu", bias=0, distribution="normal"
+):
+    assert distribution in ["uniform", "normal"]
+    if distribution == "uniform":
         nn.init.kaiming_uniform_(
-            module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
+            module.weight, a=a, mode=mode, nonlinearity=nonlinearity
+        )
     else:
         nn.init.kaiming_normal_(
-            module.weight, a=a, mode=mode, nonlinearity=nonlinearity)
-    if hasattr(module, 'bias') and module.bias is not None:
+            module.weight, a=a, mode=mode, nonlinearity=nonlinearity
+        )
+    if hasattr(module, "bias") and module.bias is not None:
         nn.init.constant_(module.bias, bias)
 
 
@@ -70,12 +69,12 @@ def initialize_weights(net_l, scale=1):
     for net in net_l:
         for m in net.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Conv3d):
-                init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+                init.kaiming_normal_(m.weight, a=0, mode="fan_in")
                 m.weight.data *= scale  # for residual block
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, mbnb.nn.Linear):
-                init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+                init.kaiming_normal_(m.weight, a=0, mode="fan_in")
                 m.weight.data *= scale
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -107,10 +106,10 @@ def default_init_weights(module, scale=1):
     """
     for m in module.modules():
         if isinstance(m, nn.Conv2d):
-            kaiming_init(m, a=0, mode='fan_in', bias=0)
+            kaiming_init(m, a=0, mode="fan_in", bias=0)
             m.weight.data *= scale
         elif isinstance(m, mbnb.nn.Linear):
-            kaiming_init(m, a=0, mode='fan_in', bias=0)
+            kaiming_init(m, a=0, mode="fan_in", bias=0)
             m.weight.data *= scale
 
 
@@ -228,7 +227,7 @@ class AttentionPool2d(nn.Module):
     ):
         super().__init__()
         self.positional_embedding = nn.Parameter(
-            torch.randn(embed_dim, spacial_dim ** 2 + 1) / embed_dim ** 0.5
+            torch.randn(embed_dim, spacial_dim**2 + 1) / embed_dim**0.5
         )
         self.qkv_proj = conv_nd(1, embed_dim, 3 * embed_dim, 1)
         self.c_proj = conv_nd(1, embed_dim, output_dim or embed_dim, 1)
@@ -239,7 +238,9 @@ class AttentionPool2d(nn.Module):
         b, c, *_spatial = x.shape
         x = x.reshape(b, c, -1)  # NC(HW)
         x = torch.cat([x.mean(dim=-1, keepdim=True), x], dim=-1)  # NC(HW+1)
-        x = x + self.positional_embedding[None, :, :x.shape[-1]].to(x.dtype)  # NC(HW+1)
+        x = x + self.positional_embedding[None, :, : x.shape[-1]].to(
+            x.dtype
+        )  # NC(HW+1)
         x = self.qkv_proj(x)
         x = self.attention(x)
         x = self.c_proj(x)
@@ -296,7 +297,9 @@ class Upsample(nn.Module):
             if dims == 1:
                 ksize = 5
                 pad = 2
-            self.conv = conv_nd(dims, self.channels, self.out_channels, ksize, padding=pad)
+            self.conv = conv_nd(
+                dims, self.channels, self.out_channels, ksize, padding=pad
+            )
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -331,7 +334,12 @@ class Downsample(nn.Module):
         stride = factor
         if use_conv:
             self.op = conv_nd(
-                dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad
+                dims,
+                self.channels,
+                self.out_channels,
+                ksize,
+                stride=stride,
+                padding=pad,
             )
         else:
             assert self.channels == self.out_channels
@@ -346,6 +354,7 @@ class cGLU(nn.Module):
     """
     Gated GELU for channel-first architectures.
     """
+
     def __init__(self, dim_in, dim_out=None):
         super().__init__()
         dim_out = dim_in if dim_out is None else dim_out
@@ -414,7 +423,13 @@ class ResBlock(nn.Module):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+                conv_nd(
+                    dims,
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size,
+                    padding=padding,
+                )
             ),
         )
 
@@ -435,9 +450,7 @@ class ResBlock(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         if self.checkpointing_enabled:
-            return checkpoint(
-                self._forward, x
-            )
+            return checkpoint(self._forward, x)
         else:
             return self._forward(x)
 
@@ -465,11 +478,11 @@ def build_local_attention_mask(n, l, fixed_region=0):
     Returns:
         A mask that can be applied to AttentionBlock to achieve local attention.
     """
-    assert l*2 < n, f'Local context must be less than global context. {l}, {n}'
-    o = torch.arange(0,n)
-    c = o.unsqueeze(-1).repeat(1,n)
-    r = o.unsqueeze(0).repeat(n,1)
-    localized = ((-(r-c).abs())+l).clamp(0,l-1) / (l-1)
+    assert l * 2 < n, f"Local context must be less than global context. {l}, {n}"
+    o = torch.arange(0, n)
+    c = o.unsqueeze(-1).repeat(1, n)
+    r = o.unsqueeze(0).repeat(n, 1)
+    localized = ((-(r - c).abs()) + l).clamp(0, l - 1) / (l - 1)
     localized[:fixed_region] = 1
     localized[:, :fixed_region] = 1
     mask = localized > 0
@@ -477,7 +490,7 @@ def build_local_attention_mask(n, l, fixed_region=0):
 
 
 def test_local_attention_mask():
-    print(build_local_attention_mask(9,4,1))
+    print(build_local_attention_mask(9, 4, 1))
 
 
 class RelativeQKBias(nn.Module):
@@ -487,28 +500,31 @@ class RelativeQKBias(nn.Module):
 
     If symmetric=False, a different bias is applied to each side of the input element, otherwise the bias is symmetric.
     """
+
     def __init__(self, l, max_positions=4000, symmetric=True):
         super().__init__()
         if symmetric:
-            self.emb = nn.Parameter(torch.randn(l+1) * .01)
-            o = torch.arange(0,max_positions)
-            c = o.unsqueeze(-1).repeat(1,max_positions)
-            r = o.unsqueeze(0).repeat(max_positions,1)
-            M = ((-(r-c).abs())+l).clamp(0,l)
+            self.emb = nn.Parameter(torch.randn(l + 1) * 0.01)
+            o = torch.arange(0, max_positions)
+            c = o.unsqueeze(-1).repeat(1, max_positions)
+            r = o.unsqueeze(0).repeat(max_positions, 1)
+            M = ((-(r - c).abs()) + l).clamp(0, l)
         else:
-            self.emb = nn.Parameter(torch.randn(l*2+2) * .01)
-            a = torch.arange(0,max_positions)
+            self.emb = nn.Parameter(torch.randn(l * 2 + 2) * 0.01)
+            a = torch.arange(0, max_positions)
             c = a.unsqueeze(-1) - a
             m = (c >= -l).logical_and(c <= l)
-            M = (l+c+1)*m
-        self.register_buffer('M', M, persistent=False)
+            M = (l + c + 1) * m
+        self.register_buffer("M", M, persistent=False)
 
     def forward(self, n):
         # Ideally, I'd return this:
         # return self.emb[self.M[:n, :n]].view(1,n,n)
         # However, indexing operations like this have horrible efficiency on GPUs: https://github.com/pytorch/pytorch/issues/15245
         # So, enter this horrible, equivalent mess:
-        return torch.gather(self.emb.unsqueeze(-1).repeat(1,n), 0, self.M[:n,:n]).view(1,n,n)
+        return torch.gather(
+            self.emb.unsqueeze(-1).repeat(1, n), 0, self.M[:n, :n]
+        ).view(1, n, n)
 
 
 class AttentionBlock(nn.Module):
@@ -550,7 +566,11 @@ class AttentionBlock(nn.Module):
             # split heads before split qkv
             self.attention = QKVAttentionLegacy(self.num_heads)
 
-        self.x_proj = nn.Identity() if out_channels == channels else conv_nd(1, channels, out_channels, 1)
+        self.x_proj = (
+            nn.Identity()
+            if out_channels == channels
+            else conv_nd(1, channels, out_channels, 1)
+        )
         self.proj_out = zero_module(conv_nd(1, out_channels, out_channels, 1))
 
     def forward(self, x, mask=None, qk_bias=None):
@@ -559,7 +579,7 @@ class AttentionBlock(nn.Module):
                 if qk_bias is None:
                     return checkpoint(self._forward, x)
                 else:
-                    assert False, 'unsupported: qk_bias but no mask'
+                    assert False, "unsupported: qk_bias but no mask"
             else:
                 if qk_bias is None:
                     return checkpoint(self._forward, x, mask)
@@ -572,9 +592,9 @@ class AttentionBlock(nn.Module):
         b, c, *spatial = x.shape
         if mask is not None:
             if len(mask.shape) == 2:
-                mask = mask.unsqueeze(0).repeat(x.shape[0],1,1)
+                mask = mask.unsqueeze(0).repeat(x.shape[0], 1, 1)
             if mask.shape[1] != x.shape[-1]:
-                mask = mask[:, :x.shape[-1], :x.shape[-1]]
+                mask = mask[:, : x.shape[-1], : x.shape[-1]]
 
         x = x.reshape(b, c, -1)
         x = self.norm(x)
@@ -651,11 +671,13 @@ class QKVAttention(nn.Module):
             mask = mask.repeat(self.n_heads, 1, 1)
             weight[mask.logical_not()] = -torch.inf
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
-        a = torch.einsum("bts,bcs->bct", weight, v.reshape(bs * self.n_heads, ch, length))
+        a = torch.einsum(
+            "bts,bcs->bct", weight, v.reshape(bs * self.n_heads, ch, length)
+        )
         return a.reshape(bs, -1, length)
 
 
-def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros'):
+def flow_warp(x, flow, interp_mode="bilinear", padding_mode="zeros"):
     """Warp an image or feature map with optical flow
     Args:
         x (Tensor): size (N, C, H, W)
@@ -690,22 +712,27 @@ class PixelUnshuffle(nn.Module):
     def forward(self, x):
         (b, f, w, h) = x.shape
         x = x.contiguous().view(b, f, w // self.r, self.r, h // self.r, self.r)
-        x = x.permute(0, 1, 3, 5, 2, 4).contiguous().view(b, f * (self.r ** 2), w // self.r, h // self.r)
+        x = (
+            x.permute(0, 1, 3, 5, 2, 4)
+            .contiguous()
+            .view(b, f * (self.r**2), w // self.r, h // self.r)
+        )
         return x
 
 
 # simply define a silu function
 def silu(input):
-    '''
+    """
     Applies the Sigmoid Linear Unit (SiLU) function element-wise:
         SiLU(x) = x * sigmoid(x)
-    '''
+    """
     return input * torch.sigmoid(input)
+
 
 # create a class wrapper from PyTorch nn.Module, so
 # the function now can be easily used in models
 class SiLU(nn.Module):
-    '''
+    """
     Applies the Sigmoid Linear Unit (SiLU) function element-wise:
         SiLU(x) = x * sigmoid(x)
     Shape:
@@ -719,28 +746,47 @@ class SiLU(nn.Module):
         >>> m = silu()
         >>> input = torch.randn(2)
         >>> output = m(input)
-    '''
+    """
+
     def __init__(self):
-        '''
+        """
         Init method.
-        '''
-        super().__init__() # init the base class
+        """
+        super().__init__()  # init the base class
 
     def forward(self, input):
-        '''
+        """
         Forward pass of the function.
-        '''
+        """
         return silu(input)
 
 
-''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvBnRelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+    ):
         super(ConvBnRelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = nn.Conv2d(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
@@ -753,7 +799,11 @@ class ConvBnRelu(nn.Module):
         # Init params.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    mode="fan_out",
+                    nonlinearity="relu" if self.relu else "linear",
+                )
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -768,14 +818,33 @@ class ConvBnRelu(nn.Module):
             return x
 
 
-''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvBnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+        weight_init_factor=1,
+    ):
         super(ConvBnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = nn.Conv2d(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
@@ -788,7 +857,11 @@ class ConvBnSilu(nn.Module):
         # Init params.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    mode="fan_out",
+                    nonlinearity="relu" if self.silu else "linear",
+                )
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -806,28 +879,51 @@ class ConvBnSilu(nn.Module):
             return x
 
 
-''' Convenience class with Conv->BN->LeakyReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->BN->LeakyReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvBnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+        weight_init_factor=1,
+    ):
         super(ConvBnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = nn.Conv2d(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
             self.bn = None
         if activation:
-            self.lelu = nn.LeakyReLU(negative_slope=.1)
+            self.lelu = nn.LeakyReLU(negative_slope=0.1)
         else:
             self.lelu = None
 
         # Init params.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
-                                        nonlinearity='leaky_relu' if self.lelu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    a=0.1,
+                    mode="fan_out",
+                    nonlinearity="leaky_relu" if self.lelu else "linear",
+                )
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -845,28 +941,52 @@ class ConvBnLelu(nn.Module):
             return x
 
 
-''' Convenience class with Conv->GroupNorm->LeakyReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->GroupNorm->LeakyReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvGnLelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8, weight_init_factor=1):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+        num_groups=8,
+        weight_init_factor=1,
+    ):
         super(ConvGnLelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = nn.Conv2d(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.gn = nn.GroupNorm(num_groups, filters_out)
         else:
             self.gn = None
         if activation:
-            self.lelu = nn.LeakyReLU(negative_slope=.2)
+            self.lelu = nn.LeakyReLU(negative_slope=0.2)
         else:
             self.lelu = None
 
         # Init params.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, a=.1, mode='fan_out',
-                                        nonlinearity='leaky_relu' if self.lelu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    a=0.1,
+                    mode="fan_out",
+                    nonlinearity="leaky_relu" if self.lelu else "linear",
+                )
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -884,14 +1004,35 @@ class ConvGnLelu(nn.Module):
             return x
 
 
-''' Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->BN->SiLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvGnSilu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, num_groups=8, weight_init_factor=1, convnd=nn.Conv2d):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+        num_groups=8,
+        weight_init_factor=1,
+        convnd=nn.Conv2d,
+    ):
         super(ConvGnSilu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = convnd(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = convnd(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.gn = nn.GroupNorm(num_groups, filters_out)
         else:
@@ -904,7 +1045,11 @@ class ConvGnSilu(nn.Module):
         # Init params.
         for m in self.modules():
             if isinstance(m, convnd):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.silu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    mode="fan_out",
+                    nonlinearity="relu" if self.silu else "linear",
+                )
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -922,14 +1067,33 @@ class ConvGnSilu(nn.Module):
             return x
 
 
-''' Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
-    kernel sizes. '''
+""" Convenience class with Conv->BN->ReLU. Includes weight initialization and auto-padding for standard
+    kernel sizes. """
+
+
 class ConvBnRelu(nn.Module):
-    def __init__(self, filters_in, filters_out, kernel_size=3, stride=1, activation=True, norm=True, bias=True, weight_init_factor=1):
+    def __init__(
+        self,
+        filters_in,
+        filters_out,
+        kernel_size=3,
+        stride=1,
+        activation=True,
+        norm=True,
+        bias=True,
+        weight_init_factor=1,
+    ):
         super(ConvBnRelu, self).__init__()
         padding_map = {1: 0, 3: 1, 5: 2, 7: 3}
         assert kernel_size in padding_map.keys()
-        self.conv = nn.Conv2d(filters_in, filters_out, kernel_size, stride, padding_map[kernel_size], bias=bias)
+        self.conv = nn.Conv2d(
+            filters_in,
+            filters_out,
+            kernel_size,
+            stride,
+            padding_map[kernel_size],
+            bias=bias,
+        )
         if norm:
             self.bn = nn.BatchNorm2d(filters_out)
         else:
@@ -942,7 +1106,11 @@ class ConvBnRelu(nn.Module):
         # Init params.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu' if self.relu else 'linear')
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    mode="fan_out",
+                    nonlinearity="relu" if self.relu else "linear",
+                )
                 m.weight.data *= weight_init_factor
                 if m.bias is not None:
                     m.bias.data.zero_()
@@ -962,14 +1130,57 @@ class ConvBnRelu(nn.Module):
 
 # Simple way to chain multiple conv->act->norms together in an intuitive way.
 class MultiConvBlock(nn.Module):
-    def __init__(self, filters_in, filters_mid, filters_out, kernel_size, depth, scale_init=1, norm=False, weight_init_factor=1):
+    def __init__(
+        self,
+        filters_in,
+        filters_mid,
+        filters_out,
+        kernel_size,
+        depth,
+        scale_init=1,
+        norm=False,
+        weight_init_factor=1,
+    ):
         assert depth >= 2
         super(MultiConvBlock, self).__init__()
-        self.noise_scale = nn.Parameter(torch.full((1,), fill_value=.01))
-        self.bnconvs = nn.ModuleList([ConvBnLelu(filters_in, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor)] +
-                                     [ConvBnLelu(filters_mid, filters_mid, kernel_size, norm=norm, bias=False, weight_init_factor=weight_init_factor) for i in range(depth - 2)] +
-                                     [ConvBnLelu(filters_mid, filters_out, kernel_size, activation=False, norm=False, bias=False, weight_init_factor=weight_init_factor)])
-        self.scale = nn.Parameter(torch.full((1,), fill_value=scale_init, dtype=torch.float))
+        self.noise_scale = nn.Parameter(torch.full((1,), fill_value=0.01))
+        self.bnconvs = nn.ModuleList(
+            [
+                ConvBnLelu(
+                    filters_in,
+                    filters_mid,
+                    kernel_size,
+                    norm=norm,
+                    bias=False,
+                    weight_init_factor=weight_init_factor,
+                )
+            ]
+            + [
+                ConvBnLelu(
+                    filters_mid,
+                    filters_mid,
+                    kernel_size,
+                    norm=norm,
+                    bias=False,
+                    weight_init_factor=weight_init_factor,
+                )
+                for i in range(depth - 2)
+            ]
+            + [
+                ConvBnLelu(
+                    filters_mid,
+                    filters_out,
+                    kernel_size,
+                    activation=False,
+                    norm=False,
+                    bias=False,
+                    weight_init_factor=weight_init_factor,
+                )
+            ]
+        )
+        self.scale = nn.Parameter(
+            torch.full((1,), fill_value=scale_init, dtype=torch.float)
+        )
         self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x, noise=None):
@@ -988,10 +1199,38 @@ class ExpansionBlock(nn.Module):
         super(ExpansionBlock, self).__init__()
         if filters_out is None:
             filters_out = filters_in // 2
-        self.decimate = block(filters_in, filters_out, kernel_size=1, bias=False, activation=False, norm=True)
-        self.process_passthrough = block(filters_out, filters_out, kernel_size=3, bias=True, activation=False, norm=True)
-        self.conjoin = block(filters_out*2, filters_out, kernel_size=3, bias=False, activation=True, norm=False)
-        self.process = block(filters_out, filters_out, kernel_size=3, bias=False, activation=True, norm=True)
+        self.decimate = block(
+            filters_in,
+            filters_out,
+            kernel_size=1,
+            bias=False,
+            activation=False,
+            norm=True,
+        )
+        self.process_passthrough = block(
+            filters_out,
+            filters_out,
+            kernel_size=3,
+            bias=True,
+            activation=False,
+            norm=True,
+        )
+        self.conjoin = block(
+            filters_out * 2,
+            filters_out,
+            kernel_size=3,
+            bias=False,
+            activation=True,
+            norm=False,
+        )
+        self.process = block(
+            filters_out,
+            filters_out,
+            kernel_size=3,
+            bias=False,
+            activation=True,
+            norm=True,
+        )
 
     # input is the feature signal with shape  (b, f, w, h)
     # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
@@ -1012,10 +1251,38 @@ class ExpansionBlock2(nn.Module):
         super(ExpansionBlock2, self).__init__()
         if filters_out is None:
             filters_out = filters_in // 2
-        self.decimate = block(filters_in, filters_out, kernel_size=1, bias=False, activation=False, norm=True)
-        self.process_passthrough = block(filters_out, filters_out, kernel_size=3, bias=True, activation=False, norm=True)
-        self.conjoin = block(filters_out*2, filters_out*2, kernel_size=3, bias=False, activation=True, norm=False)
-        self.reduce = block(filters_out*2, filters_out, kernel_size=3, bias=False, activation=True, norm=True)
+        self.decimate = block(
+            filters_in,
+            filters_out,
+            kernel_size=1,
+            bias=False,
+            activation=False,
+            norm=True,
+        )
+        self.process_passthrough = block(
+            filters_out,
+            filters_out,
+            kernel_size=3,
+            bias=True,
+            activation=False,
+            norm=True,
+        )
+        self.conjoin = block(
+            filters_out * 2,
+            filters_out * 2,
+            kernel_size=3,
+            bias=False,
+            activation=True,
+            norm=False,
+        )
+        self.reduce = block(
+            filters_out * 2,
+            filters_out,
+            kernel_size=3,
+            bias=False,
+            activation=True,
+            norm=True,
+        )
 
     # input is the feature signal with shape  (b, f, w, h)
     # passthrough is the structure signal with shape (b, f/2, w*2, h*2)
@@ -1030,14 +1297,30 @@ class ExpansionBlock2(nn.Module):
 
 # Similar to ExpansionBlock2 but does not upsample.
 class ConjoinBlock(nn.Module):
-    def __init__(self, filters_in, filters_out=None, filters_pt=None, block=ConvGnSilu, norm=True):
+    def __init__(
+        self, filters_in, filters_out=None, filters_pt=None, block=ConvGnSilu, norm=True
+    ):
         super(ConjoinBlock, self).__init__()
         if filters_out is None:
             filters_out = filters_in
         if filters_pt is None:
             filters_pt = filters_in
-        self.process = block(filters_in + filters_pt, filters_in + filters_pt, kernel_size=3, bias=False, activation=True, norm=norm)
-        self.decimate = block(filters_in + filters_pt, filters_out, kernel_size=1, bias=False, activation=False, norm=norm)
+        self.process = block(
+            filters_in + filters_pt,
+            filters_in + filters_pt,
+            kernel_size=3,
+            bias=False,
+            activation=True,
+            norm=norm,
+        )
+        self.decimate = block(
+            filters_in + filters_pt,
+            filters_out,
+            kernel_size=1,
+            bias=False,
+            activation=False,
+            norm=norm,
+        )
 
     def forward(self, input, passthrough):
         x = torch.cat([input, passthrough], dim=1)
@@ -1047,13 +1330,36 @@ class ConjoinBlock(nn.Module):
 
 # Designed explicitly to join a mainline trunk with reference data. Implemented as a residual branch.
 class ReferenceJoinBlock(nn.Module):
-    def __init__(self, nf, residual_weight_init_factor=1, block=ConvGnLelu, final_norm=False, kernel_size=3, depth=3, join=True):
+    def __init__(
+        self,
+        nf,
+        residual_weight_init_factor=1,
+        block=ConvGnLelu,
+        final_norm=False,
+        kernel_size=3,
+        depth=3,
+        join=True,
+    ):
         super(ReferenceJoinBlock, self).__init__()
-        self.branch = MultiConvBlock(nf * 2, nf + nf // 2, nf, kernel_size=kernel_size, depth=depth,
-                                     scale_init=residual_weight_init_factor, norm=False,
-                                     weight_init_factor=residual_weight_init_factor)
+        self.branch = MultiConvBlock(
+            nf * 2,
+            nf + nf // 2,
+            nf,
+            kernel_size=kernel_size,
+            depth=depth,
+            scale_init=residual_weight_init_factor,
+            norm=False,
+            weight_init_factor=residual_weight_init_factor,
+        )
         if join:
-            self.join_conv = block(nf, nf, kernel_size=kernel_size, norm=final_norm, bias=False, activation=True)
+            self.join_conv = block(
+                nf,
+                nf,
+                kernel_size=kernel_size,
+                norm=final_norm,
+                bias=False,
+                activation=True,
+            )
         else:
             self.join_conv = None
 
@@ -1068,9 +1374,24 @@ class ReferenceJoinBlock(nn.Module):
 
 # Basic convolutional upsampling block that uses interpolate.
 class UpconvBlock(nn.Module):
-    def __init__(self, filters_in, filters_out=None, block=ConvGnSilu, norm=True, activation=True, bias=False):
+    def __init__(
+        self,
+        filters_in,
+        filters_out=None,
+        block=ConvGnSilu,
+        norm=True,
+        activation=True,
+        bias=False,
+    ):
         super(UpconvBlock, self).__init__()
-        self.process = block(filters_in, filters_out, kernel_size=3, bias=bias, activation=activation, norm=norm)
+        self.process = block(
+            filters_in,
+            filters_out,
+            kernel_size=3,
+            bias=bias,
+            activation=activation,
+            norm=norm,
+        )
 
     def forward(self, x):
         x = F.interpolate(x, scale_factor=2, mode="nearest")
@@ -1082,26 +1403,65 @@ class FinalUpsampleBlock2x(nn.Module):
     def __init__(self, nf, block=ConvGnLelu, out_nc=3, scale=2):
         super(FinalUpsampleBlock2x, self).__init__()
         if scale == 2:
-            self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
-                                       UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
-                                       block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
-                                       block(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False))
+            self.chain = nn.Sequential(
+                block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
+                UpconvBlock(
+                    nf, nf // 2, block=block, norm=False, activation=True, bias=True
+                ),
+                block(
+                    nf // 2,
+                    nf // 2,
+                    kernel_size=3,
+                    norm=False,
+                    activation=False,
+                    bias=True,
+                ),
+                block(
+                    nf // 2,
+                    out_nc,
+                    kernel_size=3,
+                    norm=False,
+                    activation=False,
+                    bias=False,
+                ),
+            )
         else:
-            self.chain = nn.Sequential(block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
-                                       UpconvBlock(nf, nf, block=block, norm=False, activation=True, bias=True),
-                                       block(nf, nf, kernel_size=3, norm=False, activation=False, bias=True),
-                                       UpconvBlock(nf, nf // 2, block=block, norm=False, activation=True, bias=True),
-                                       block(nf // 2, nf // 2, kernel_size=3, norm=False, activation=False, bias=True),
-                                       block(nf // 2, out_nc, kernel_size=3, norm=False, activation=False, bias=False))
+            self.chain = nn.Sequential(
+                block(nf, nf, kernel_size=3, norm=False, activation=True, bias=True),
+                UpconvBlock(
+                    nf, nf, block=block, norm=False, activation=True, bias=True
+                ),
+                block(nf, nf, kernel_size=3, norm=False, activation=False, bias=True),
+                UpconvBlock(
+                    nf, nf // 2, block=block, norm=False, activation=True, bias=True
+                ),
+                block(
+                    nf // 2,
+                    nf // 2,
+                    kernel_size=3,
+                    norm=False,
+                    activation=False,
+                    bias=True,
+                ),
+                block(
+                    nf // 2,
+                    out_nc,
+                    kernel_size=3,
+                    norm=False,
+                    activation=False,
+                    bias=False,
+                ),
+            )
 
     def forward(self, x):
         return self.chain(x)
+
 
 # torch.gather() which operates as it always fucking should have: pulling indexes from the input.
 def gather_2d(input, index):
     b, c, h, w = input.shape
     nodim = input.view(b, c, h * w)
-    ind_nd = index[:, 0]*w + index[:, 1]
+    ind_nd = index[:, 0] * w + index[:, 1]
     ind_nd = ind_nd.unsqueeze(1)
     ind_nd = ind_nd.repeat((1, c))
     ind_nd = ind_nd.unsqueeze(2)

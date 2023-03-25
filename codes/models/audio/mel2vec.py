@@ -9,7 +9,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import distributed
-from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
+from transformers.models.wav2vec2.modeling_wav2vec2 import (
+    _compute_mask_indices,
+    _sample_negative_indices,
+)
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 
 from models.arch_util import ResBlock
@@ -65,7 +68,11 @@ class Wav2Vec2Attention(nn.Module):
         self.out_proj = mbnb.nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -134,7 +141,10 @@ class Wav2Vec2Attention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -144,7 +154,9 @@ class Wav2Vec2Attention(nn.Module):
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -152,12 +164,18 @@ class Wav2Vec2Attention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -204,24 +222,28 @@ class Wav2Vec2EncoderLayer(nn.Module):
         super().__init__()
         self.attention = Wav2Vec2Attention(
             embed_dim=hidden_size,
-            num_heads=hidden_size//64,
+            num_heads=hidden_size // 64,
             dropout=dropout,
             is_decoder=False,
         )
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(hidden_size, eps=1e-5)
-        self.feed_forward = Wav2Vec2FeedForward(hidden_size, hidden_size*2, dropout)
+        self.feed_forward = Wav2Vec2FeedForward(hidden_size, hidden_size * 2, dropout)
         self.final_layer_norm = nn.LayerNorm(hidden_size, eps=1e-5)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+        hidden_states = hidden_states + self.feed_forward(
+            self.final_layer_norm(hidden_states)
+        )
 
         outputs = (hidden_states,)
 
@@ -243,6 +265,8 @@ class Wav2Vec2SamePadLayer(nn.Module):
 
 
 from torch.nn.utils.weight_norm import WeightNorm
+
+
 def __deepcopy__(self, memo):
     # save and delete all weightnorm weights on self
     weights = {}
@@ -266,7 +290,9 @@ def __deepcopy__(self, memo):
 
 
 class Wav2Vec2PositionalConvEmbedding(nn.Module):
-    def __init__(self, hidden_size, num_conv_pos_embeddings=128, num_conv_pos_embedding_groups=16):
+    def __init__(
+        self, hidden_size, num_conv_pos_embeddings=128, num_conv_pos_embedding_groups=16
+    ):
         super().__init__()
         self.conv = nn.Conv1d(
             hidden_size,
@@ -276,7 +302,9 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             groups=num_conv_pos_embedding_groups,
         )
         # Fix weightnorm deepcopy; see: https://github.com/pytorch/pytorch/issues/28594
-        self.conv.orig_deepcopy = getattr(Wav2Vec2PositionalConvEmbedding, '__deepcopy__', None)
+        self.conv.orig_deepcopy = getattr(
+            Wav2Vec2PositionalConvEmbedding, "__deepcopy__", None
+        )
         self.conv.__deepcopy__ = __deepcopy__.__get__(self.conv, self.conv.__class__)
 
         if is_deepspeed_zero3_enabled():
@@ -309,7 +337,9 @@ class Wav2Vec2Encoder(nn.Module):
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(hidden_size)
         self.layer_norm = nn.LayerNorm(hidden_size, eps=1e-5)
         self.dropout = nn.Dropout(dropout)
-        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(hidden_size, dropout) for _ in range(num_layers)])
+        self.layers = nn.ModuleList(
+            [Wav2Vec2EncoderLayer(hidden_size, dropout) for _ in range(num_layers)]
+        )
         self.layerdrop = layerdrop
 
     def forward(
@@ -325,9 +355,14 @@ class Wav2Vec2Encoder(nn.Module):
             hidden_states[~attention_mask] = 0.0
 
             # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
+            attention_mask = (
+                1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+            ) * -10000.0
             attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                attention_mask.shape[0],
+                1,
+                attention_mask.shape[-1],
+                attention_mask.shape[-1],
             )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -343,7 +378,11 @@ class Wav2Vec2Encoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
 
-            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            skip_the_layer = (
+                True
+                if self.training and (dropout_probability < self.layerdrop)
+                else False
+            )
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 layer_fn = functools.partial(layer, attention_mask=attention_mask)
                 layer_outputs = checkpoint(layer_fn, hidden_states)
@@ -355,59 +394,84 @@ class Wav2Vec2Encoder(nn.Module):
 
 
 class Mel2Vec(nn.Module):
-    def __init__(self,
-                 mel_input_channels=256,
-                 inner_dim=1024,
-                 layers=24,
-                 dropout=.1,
-                 layerdrop=0,
-                 mask_time_prob=.65,
-                 mask_time_length=10,
-                 disable_custom_linear_init=False,
-                 linear_init_scale=.02,
-                 feature_producer_type='standard',
-                 ):
+    def __init__(
+        self,
+        mel_input_channels=256,
+        inner_dim=1024,
+        layers=24,
+        dropout=0.1,
+        layerdrop=0,
+        mask_time_prob=0.65,
+        mask_time_length=10,
+        disable_custom_linear_init=False,
+        linear_init_scale=0.02,
+        feature_producer_type="standard",
+    ):
         super().__init__()
-        if feature_producer_type == 'standard':
-            self.input_blocks = nn.Sequential(nn.Conv1d(mel_input_channels, inner_dim//2, kernel_size=5, padding=2, stride=2),
-                                              nn.GroupNorm(num_groups=8, num_channels=inner_dim//2, affine=True),
-                                              nn.GELU(),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              nn.Conv1d(inner_dim//2, inner_dim, kernel_size=3, padding=1, stride=2),
-                                              nn.GELU(),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              )
+        if feature_producer_type == "standard":
+            self.input_blocks = nn.Sequential(
+                nn.Conv1d(
+                    mel_input_channels,
+                    inner_dim // 2,
+                    kernel_size=5,
+                    padding=2,
+                    stride=2,
+                ),
+                nn.GroupNorm(num_groups=8, num_channels=inner_dim // 2, affine=True),
+                nn.GELU(),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                nn.Conv1d(
+                    inner_dim // 2, inner_dim, kernel_size=3, padding=1, stride=2
+                ),
+                nn.GELU(),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+            )
             self.dim_reduction_mult = 4
-        elif feature_producer_type == 'voice_8x':
-            self.input_blocks = nn.Sequential(nn.Conv1d(mel_input_channels, inner_dim//4, kernel_size=5, padding=2, stride=2),
-                                              nn.GroupNorm(num_groups=8, num_channels=inner_dim//4, affine=True),
-                                              nn.GELU(),
-                                              ResBlock(dims=1, channels=inner_dim//4, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim//4, dropout=dropout),
-                                              nn.Conv1d(inner_dim//4, inner_dim//2, kernel_size=3, padding=1, stride=2),
-                                              nn.GELU(),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim//2, dropout=dropout),
-                                              nn.Conv1d(inner_dim//2, inner_dim, kernel_size=3, padding=1, stride=2),
-                                              nn.GELU(),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                                              )
+        elif feature_producer_type == "voice_8x":
+            self.input_blocks = nn.Sequential(
+                nn.Conv1d(
+                    mel_input_channels,
+                    inner_dim // 4,
+                    kernel_size=5,
+                    padding=2,
+                    stride=2,
+                ),
+                nn.GroupNorm(num_groups=8, num_channels=inner_dim // 4, affine=True),
+                nn.GELU(),
+                ResBlock(dims=1, channels=inner_dim // 4, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim // 4, dropout=dropout),
+                nn.Conv1d(
+                    inner_dim // 4, inner_dim // 2, kernel_size=3, padding=1, stride=2
+                ),
+                nn.GELU(),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim // 2, dropout=dropout),
+                nn.Conv1d(
+                    inner_dim // 2, inner_dim, kernel_size=3, padding=1, stride=2
+                ),
+                nn.GELU(),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+            )
             self.dim_reduction_mult = 8
         else:
             assert False, f"feature_producer_type={feature_producer_type} not supported"
         self.projector = Mel2Vec2FeatureProjection(inner_dim, dropout)
-        self.masked_spec_embed = nn.Parameter(torch.rand(inner_dim,))
+        self.masked_spec_embed = nn.Parameter(
+            torch.rand(
+                inner_dim,
+            )
+        )
         self.encoder = Wav2Vec2Encoder(inner_dim, dropout, layers, layerdrop)
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
@@ -423,7 +487,8 @@ class Mel2Vec(nn.Module):
             nn.init.normal_(
                 module.conv.weight,
                 mean=0,
-                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+                std=2
+                * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, Mel2Vec2FeatureProjection):
@@ -442,7 +507,9 @@ class Mel2Vec(nn.Module):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                k = math.sqrt(
+                    module.groups / (module.in_channels * module.kernel_size[0])
+                )
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
     def apply_masking(
@@ -461,7 +528,9 @@ class Mel2Vec(nn.Module):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
         elif self.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -470,13 +539,17 @@ class Mel2Vec(nn.Module):
                 attention_mask=attention_mask,
                 min_masks=self.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = torch.tensor(
+                mask_time_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
 
         return hidden_states
 
     def forward(self, mel, mask_time_indices=None, return_projections=False):
-        proj = self.input_blocks(mel).permute(0,2,1)
+        proj = self.input_blocks(mel).permute(0, 2, 1)
         proj, norm_proj = self.projector(proj)
 
         # Mask projections
@@ -494,7 +567,13 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
     """
 
-    def __init__(self, proj_dim=1024, codevector_dim=512, num_codevector_groups=2, num_codevectors_per_group=320):
+    def __init__(
+        self,
+        proj_dim=1024,
+        codevector_dim=512,
+        num_codevector_groups=2,
+        num_codevectors_per_group=320,
+    ):
         super().__init__()
         self.codevector_dim = codevector_dim
         self.num_groups = num_codevector_groups
@@ -509,7 +588,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, codevector_dim // self.num_groups)
+            torch.FloatTensor(
+                1, self.num_groups * self.num_vars, codevector_dim // self.num_groups
+            )
         )
         self.weight_proj = mbnb.nn.Linear(proj_dim, self.num_groups * self.num_vars)
 
@@ -530,7 +611,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         else:
             marginal_probs = probs.mean(dim=0)
 
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(
+            -torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)
+        ).sum()
         return perplexity
 
     def get_codes(self, hidden_states):
@@ -538,7 +621,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
         # project to codevector dim
         hidden_states = self.weight_proj(hidden_states)
-        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
+        hidden_states = hidden_states.view(
+            batch_size * sequence_length * self.num_groups, -1
+        )
         codevector_idx = hidden_states.argmax(dim=-1)
         idxs = codevector_idx.view(batch_size, sequence_length, self.num_groups)
         return idxs
@@ -548,7 +633,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
         # project to codevector dim
         hidden_states = self.weight_proj(hidden_states)
-        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
+        hidden_states = hidden_states.view(
+            batch_size * sequence_length * self.num_groups, -1
+        )
 
         if self.training:
             # sample code vector probs via gumbel in differentiable way
@@ -558,9 +645,14 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
-                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
+                hidden_states.view(
+                    batch_size * sequence_length, self.num_groups, -1
+                ).float(),
+                dim=-1,
             )
-            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+            perplexity = self._compute_perplexity(
+                codevector_soft_dist, mask_time_indices
+            )
         else:
             # take argmax in non-differentiable way
             # compute hard codevector distribution (one hot)
@@ -568,7 +660,9 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
             )
-            codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
+            codevector_probs = codevector_probs.view(
+                batch_size * sequence_length, self.num_groups, -1
+            )
 
             perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
 
@@ -576,25 +670,50 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
         codevectors = (
-            codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+            codevectors_per_group.view(
+                batch_size * sequence_length, self.num_groups, self.num_vars, -1
+            )
             .sum(-2)
             .view(batch_size, sequence_length, -1)
         )
 
         if return_probs:
-            return codevectors, perplexity, codevector_probs.view(batch_size, sequence_length, self.num_groups, self.num_vars)
+            return (
+                codevectors,
+                perplexity,
+                codevector_probs.view(
+                    batch_size, sequence_length, self.num_groups, self.num_vars
+                ),
+            )
         return codevectors, perplexity
 
 
 class ContrastiveTrainingWrapper(nn.Module):
-    def __init__(self, inner_dim=1024, dropout=.1, mask_time_prob=.65, mask_time_length=6, num_negatives=100,
-                 max_gumbel_temperature=2.0, min_gumbel_temperature=.5, gumbel_temperature_decay=.999995,
-                 codebook_size=320, codebook_groups=2, freq_mask_percent=0, inp_length_multiplier=256,
-                 do_reconstruction_loss=False,
-                 **kwargs):
+    def __init__(
+        self,
+        inner_dim=1024,
+        dropout=0.1,
+        mask_time_prob=0.65,
+        mask_time_length=6,
+        num_negatives=100,
+        max_gumbel_temperature=2.0,
+        min_gumbel_temperature=0.5,
+        gumbel_temperature_decay=0.999995,
+        codebook_size=320,
+        codebook_groups=2,
+        freq_mask_percent=0,
+        inp_length_multiplier=256,
+        do_reconstruction_loss=False,
+        **kwargs,
+    ):
         super().__init__()
-        self.m2v = Mel2Vec(inner_dim=inner_dim, dropout=dropout, mask_time_prob=mask_time_prob,
-                           mask_time_length=mask_time_length, **kwargs)
+        self.m2v = Mel2Vec(
+            inner_dim=inner_dim,
+            dropout=dropout,
+            mask_time_prob=mask_time_prob,
+            mask_time_length=mask_time_length,
+            **kwargs,
+        )
         self.num_negatives = num_negatives
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
@@ -602,23 +721,44 @@ class ContrastiveTrainingWrapper(nn.Module):
         self.min_gumbel_temperature = min_gumbel_temperature
         self.gumbel_temperature_decay = gumbel_temperature_decay
         self.freq_mask_percent = freq_mask_percent
-        self.quantizer = Wav2Vec2GumbelVectorQuantizer(inner_dim, num_codevector_groups=codebook_groups, num_codevectors_per_group=codebook_size)
+        self.quantizer = Wav2Vec2GumbelVectorQuantizer(
+            inner_dim,
+            num_codevector_groups=codebook_groups,
+            num_codevectors_per_group=codebook_size,
+        )
         self.num_losses_record = []
         self.inp_length_factor = inp_length_multiplier
 
         # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = mbnb.nn.Linear(inner_dim, self.quantizer.codevector_dim)
-        self.project_q = mbnb.nn.Linear(self.quantizer.codevector_dim, self.quantizer.codevector_dim)
+        self.project_q = mbnb.nn.Linear(
+            self.quantizer.codevector_dim, self.quantizer.codevector_dim
+        )
 
         self.reconstruction = do_reconstruction_loss
         if do_reconstruction_loss:
-            blocks = [[ResBlock(dims=1, channels=inner_dim, dropout=dropout),
-                       ResBlock(dims=1, channels=inner_dim, dropout=dropout, use_conv=True, up=True)] for _ in range(int(math.log2(self.m2v.dim_reduction_mult)))]
+            blocks = [
+                [
+                    ResBlock(dims=1, channels=inner_dim, dropout=dropout),
+                    ResBlock(
+                        dims=1,
+                        channels=inner_dim,
+                        dropout=dropout,
+                        use_conv=True,
+                        up=True,
+                    ),
+                ]
+                for _ in range(int(math.log2(self.m2v.dim_reduction_mult)))
+            ]
             blocks = sum(blocks, [])
-            blocks.append(nn.Conv1d(inner_dim, self.m2v.mel_dim, kernel_size=3, padding=1))
+            blocks.append(
+                nn.Conv1d(inner_dim, self.m2v.mel_dim, kernel_size=3, padding=1)
+            )
             self.reconstruction_net = nn.Sequential(
-                nn.Conv1d(self.quantizer.codevector_dim, inner_dim, kernel_size=3, padding=1),
-                *blocks
+                nn.Conv1d(
+                    self.quantizer.codevector_dim, inner_dim, kernel_size=3, padding=1
+                ),
+                *blocks,
             )
 
     @staticmethod
@@ -634,9 +774,9 @@ class ContrastiveTrainingWrapper(nn.Module):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1).type_as(
-            target_features
-        )
+        logits = torch.cosine_similarity(
+            predicted_features.float(), target_features.float(), dim=-1
+        ).type_as(target_features)
 
         # apply temperature
         logits = logits / temperature
@@ -644,20 +784,22 @@ class ContrastiveTrainingWrapper(nn.Module):
 
     def update_for_step(self, step, *args):
         self.quantizer.temperature = max(
-                    self.max_gumbel_temperature * self.gumbel_temperature_decay**step,
-                    self.min_gumbel_temperature,
-                )
+            self.max_gumbel_temperature * self.gumbel_temperature_decay**step,
+            self.min_gumbel_temperature,
+        )
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'projector': list(self.m2v.input_blocks.parameters()) + list(self.m2v.projector.parameters()),
-            'encoder': list(self.m2v.encoder.parameters()),
-            'output_blocks': list(self.project_hid.parameters()) + list(self.project_q.parameters()),
+            "projector": list(self.m2v.input_blocks.parameters())
+            + list(self.m2v.projector.parameters()),
+            "encoder": list(self.m2v.encoder.parameters()),
+            "output_blocks": list(self.project_hid.parameters())
+            + list(self.project_q.parameters()),
         }
         return groups
 
     def get_codes(self, mel, project=False):
-        proj = self.m2v.input_blocks(mel).permute(0,2,1)
+        proj = self.m2v.input_blocks(mel).permute(0, 2, 1)
         _, proj = self.m2v.projector(proj)
         if project:
             proj, _ = self.quantizer(proj)
@@ -666,33 +808,47 @@ class ContrastiveTrainingWrapper(nn.Module):
             return self.quantizer.get_codes(proj)
 
     def reconstruct(self, mel):
-        proj = self.m2v.input_blocks(mel).permute(0,2,1)
+        proj = self.m2v.input_blocks(mel).permute(0, 2, 1)
         _, proj = self.m2v.projector(proj)
         quantized_features, codevector_perplexity = self.quantizer(proj)
         quantized_features = self.project_q(quantized_features)
-        reconstruction = self.reconstruction_net(quantized_features.permute(0,2,1))
+        reconstruction = self.reconstruction_net(quantized_features.permute(0, 2, 1))
         return reconstruction
 
     def forward(self, mel, inp_lengths=None):
-        mel = mel[:, :, :-1]  # The MEL computation always pads with 1, throwing off optimal tensor math.
-        features_shape = (mel.shape[0], mel.shape[-1]//self.m2v.dim_reduction_mult)
+        mel = mel[
+            :, :, :-1
+        ]  # The MEL computation always pads with 1, throwing off optimal tensor math.
+        features_shape = (mel.shape[0], mel.shape[-1] // self.m2v.dim_reduction_mult)
         orig_mel = mel
 
         # Frequency masking
         freq_mask_width = int(random.random() * self.freq_mask_percent * mel.shape[1])
         if freq_mask_width >= 2:
-            freq_start = random.randint(0, mel.shape[1]-freq_mask_width)
-            mel[:, freq_start:freq_start+freq_mask_width] = 0
+            freq_start = random.randint(0, mel.shape[1] - freq_mask_width)
+            mel[:, freq_start : freq_start + freq_mask_width] = 0
 
         # Build input masks from inp_lengths if possible.
         attention_mask = torch.ones(features_shape, device=mel.device, dtype=torch.long)
         if inp_lengths is not None:
-            inp_lengths = inp_lengths // (self.inp_length_factor*self.m2v.dim_reduction_mult)
+            inp_lengths = inp_lengths // (
+                self.inp_length_factor * self.m2v.dim_reduction_mult
+            )
             for i, l in enumerate(inp_lengths):
                 attention_mask[i, l:] = 0
 
-        mask_time_indices = _compute_mask_indices(features_shape, self.mask_time_prob, self.mask_time_length, attention_mask=attention_mask)
-        sampled_negative_indices = torch.tensor(_sample_negative_indices(features_shape, self.num_negatives, mask_time_indices=mask_time_indices), device=mel.device)
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            self.mask_time_prob,
+            self.mask_time_length,
+            attention_mask=attention_mask,
+        )
+        sampled_negative_indices = torch.tensor(
+            _sample_negative_indices(
+                features_shape, self.num_negatives, mask_time_indices=mask_time_indices
+            ),
+            device=mel.device,
+        )
         mask_time_indices = torch.tensor(mask_time_indices, device=mel.device)
 
         outputs, proj = self.m2v(mel, mask_time_indices, return_projections=True)
@@ -723,7 +879,7 @@ class ContrastiveTrainingWrapper(nn.Module):
             quantized_features[None, :],
             negative_quantized_features,
             transformer_features,
-            .1,
+            0.1,
         )
 
         # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
@@ -738,13 +894,17 @@ class ContrastiveTrainingWrapper(nn.Module):
         logits = logits.transpose(0, 2).reshape(-1, logits.size(0))
         target = ((1 - mask_time_indices.long()) * -100).transpose(0, 1).flatten()
 
-        contrastive_loss = nn.functional.cross_entropy(logits.float(), target, reduction="mean")
+        contrastive_loss = nn.functional.cross_entropy(
+            logits.float(), target, reduction="mean"
+        )
         # 7. compute diversity loss: \mathbf{L}_d
         num_codevectors = self.quantizer.num_codevectors
         diversity_loss = (num_codevectors - codevector_perplexity) / num_codevectors
 
         if self.reconstruction:
-            reconstruction = self.reconstruction_net(quantized_features.permute(0,2,1))
+            reconstruction = self.reconstruction_net(
+                quantized_features.permute(0, 2, 1)
+            )
             reconstruction_loss = F.mse_loss(reconstruction, orig_mel)
             return contrastive_loss, diversity_loss, reconstruction_loss
 
@@ -753,15 +913,19 @@ class ContrastiveTrainingWrapper(nn.Module):
 
 @register_model
 def register_mel2vec_pretraining(opt_net, opt):
-    return ContrastiveTrainingWrapper(**opt_net['kwargs'])
+    return ContrastiveTrainingWrapper(**opt_net["kwargs"])
 
 
 @register_model
 def register_mel2vec(opt_net, opt):
-    return Mel2Vec(**opt_net['kwargs'])
+    return Mel2Vec(**opt_net["kwargs"])
 
 
-if __name__ == '__main__':
-    model = ContrastiveTrainingWrapper(freq_mask_percent=.5, do_reconstruction_loss=True, feature_producer_type='residual')
-    mel = torch.randn((2,256,401))
+if __name__ == "__main__":
+    model = ContrastiveTrainingWrapper(
+        freq_mask_percent=0.5,
+        do_reconstruction_loss=True,
+        feature_producer_type="residual",
+    )
+    mel = torch.randn((2, 256, 401))
     print(model(mel))

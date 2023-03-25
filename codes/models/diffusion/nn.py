@@ -126,7 +126,7 @@ def timestep_embedding(timesteps, dim, max_period=10000):
     if len(timesteps.shape) == 1:
         args = timesteps[:, None].float() * freqs[None]
     else:
-        args = (timesteps.float() * freqs.view(1,half,1)).permute(0,2,1)
+        args = (timesteps.float() * freqs.view(1, half, 1)).permute(0, 2, 1)
     embedding = th.cat([th.cos(args), th.sin(args)], dim=-1)
     if dim % 2:
         embedding = th.cat([embedding, th.zeros_like(embedding[:, :1])], dim=-1)

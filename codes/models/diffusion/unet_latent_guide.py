@@ -43,7 +43,7 @@ class AttentionPool2d(nn.Module):
     ):
         super().__init__()
         self.positional_embedding = nn.Parameter(
-            th.randn(embed_dim, spacial_dim ** 2 + 1) / embed_dim ** 0.5
+            th.randn(embed_dim, spacial_dim**2 + 1) / embed_dim**0.5
         )
         self.qkv_proj = conv_nd(1, embed_dim, 3 * embed_dim, 1)
         self.c_proj = conv_nd(1, embed_dim, output_dim or embed_dim, 1)
@@ -236,9 +236,7 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, x, emb
-        )
+        return checkpoint(self._forward, x, emb)
 
     def _forward(self, x, emb):
         if self.updown:
@@ -326,7 +324,7 @@ def count_flops_attn(model, _x, y):
     # We perform two matmuls with the same number of ops.
     # The first computes the weight matrix, the second computes
     # the combination of the value vectors.
-    matmul_ops = 2 * b * (num_spatial ** 2) * c
+    matmul_ops = 2 * b * (num_spatial**2) * c
     model.total_ops += th.DoubleTensor([matmul_ops])
 
 
@@ -540,7 +538,14 @@ class UNetModel(nn.Module):
                 ds *= 2
                 self._feature_size += ch
 
-        self.latent_join_reduce = ResBlock(ch*2, time_embed_dim, dropout, out_channels=ch, dims=dims, use_scale_shift_norm=use_scale_shift_norm)
+        self.latent_join_reduce = ResBlock(
+            ch * 2,
+            time_embed_dim,
+            dropout,
+            out_channels=ch,
+            dims=dims,
+            use_scale_shift_norm=use_scale_shift_norm,
+        )
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
                 ch,
@@ -655,7 +660,9 @@ class UNetModel(nn.Module):
             h = module(h, emb)
             hs.append(h)
         b, c = latent.shape
-        h = torch.cat([h, latent.view(b,c,1,1).repeat(1,1,h.shape[-2],h.shape[-1])], dim=1)
+        h = torch.cat(
+            [h, latent.view(b, c, 1, 1).repeat(1, 1, h.shape[-2], h.shape[-1])], dim=1
+        )
         h = self.latent_join_reduce(h, emb)
         h = self.middle_block(h, emb)
         for module in self.output_blocks:
@@ -676,13 +683,21 @@ class SuperResModel(UNetModel):
         self.num_corruptions = 0
         super().__init__(image_size, in_channels * 2 + num_corruptions, *args, **kwargs)
 
-    def forward(self, x, timesteps, latent, low_res=None, corruption_factor=None, **kwargs):
+    def forward(
+        self, x, timesteps, latent, low_res=None, corruption_factor=None, **kwargs
+    ):
         b, _, new_height, new_width = x.shape
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         if corruption_factor is not None:
-            corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(1, 1, new_height, new_width)
+            corruption_factor = corruption_factor.view(b, -1, 1, 1).repeat(
+                1, 1, new_height, new_width
+            )
         else:
-            corruption_factor = torch.zeros((b, self.num_corruptions, new_height, new_width), dtype=torch.float, device=x.device)
+            corruption_factor = torch.zeros(
+                (b, self.num_corruptions, new_height, new_width),
+                dtype=torch.float,
+                device=x.device,
+            )
         upsampled = torch.cat([upsampled, corruption_factor], dim=1)
         x = th.cat([x, upsampled], dim=1)
         res = super().forward(x, latent, timesteps, **kwargs)
@@ -690,7 +705,6 @@ class SuperResModel(UNetModel):
 
 
 class ResNetEncoder(nn.Module):
-
     def __init__(
         self,
         block: Type[Union[BasicBlock, Bottleneck]] = Bottleneck,
@@ -701,7 +715,7 @@ class ResNetEncoder(nn.Module):
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
-        norm_layer: Optional[Callable[..., nn.Module]] = None
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
         super(ResNetEncoder, self).__init__()
         if norm_layer is None:
@@ -715,34 +729,40 @@ class ResNetEncoder(nn.Module):
             # the 2x2 stride with a dilated convolution instead
             replace_stride_with_dilation = [False, False, False]
         if len(replace_stride_with_dilation) != 3:
-            raise ValueError("replace_stride_with_dilation should be None "
-                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+            raise ValueError(
+                "replace_stride_with_dilation should be None "
+                "or a 3-element tuple, got {}".format(replace_stride_with_dilation)
+            )
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
-                               bias=False)
+        self.conv1 = nn.Conv2d(
+            3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False
+        )
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.depth = depth
         self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
-                                       dilate=replace_stride_with_dilation[0])
-        f=128
+        self.layer2 = self._make_layer(
+            block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0]
+        )
+        f = 128
         if self.depth > 2:
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
-                                           dilate=replace_stride_with_dilation[1])
-            f=256
+            self.layer3 = self._make_layer(
+                block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1]
+            )
+            f = 256
         if self.depth > 3:
-            self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
-                                           dilate=replace_stride_with_dilation[2])
-            f=512
+            self.layer4 = self._make_layer(
+                block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2]
+            )
+            f = 512
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = mbnb.nn.Linear(f * block.expansion, output_dim)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -757,8 +777,14 @@ class ResNetEncoder(nn.Module):
                 elif isinstance(m, BasicBlock):
                     nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
 
-    def _make_layer(self, block: Type[Union[BasicBlock, Bottleneck]], planes: int, blocks: int,
-                    stride: int = 1, dilate: bool = False) -> nn.Sequential:
+    def _make_layer(
+        self,
+        block: Type[Union[BasicBlock, Bottleneck]],
+        planes: int,
+        blocks: int,
+        stride: int = 1,
+        dilate: bool = False,
+    ) -> nn.Sequential:
         norm_layer = self._norm_layer
         downsample = None
         previous_dilation = self.dilation
@@ -772,13 +798,30 @@ class ResNetEncoder(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, self.groups,
-                            self.base_width, previous_dilation, norm_layer))
+        layers.append(
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                self.groups,
+                self.base_width,
+                previous_dilation,
+                norm_layer,
+            )
+        )
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes, groups=self.groups,
-                                base_width=self.base_width, dilation=self.dilation,
-                                norm_layer=norm_layer))
+            layers.append(
+                block(
+                    self.inplanes,
+                    planes,
+                    groups=self.groups,
+                    base_width=self.base_width,
+                    dilation=self.dilation,
+                    norm_layer=norm_layer,
+                )
+            )
 
         return nn.Sequential(*layers)
 
@@ -808,13 +851,9 @@ class ResNetEncoder(nn.Module):
 
 class UnetWithBuiltInLatentEncoder(nn.Module):
     def __init__(self, **kwargs):
-        depth_map = {
-            256: 4,
-            128: 3,
-            64: 2
-        }
+        depth_map = {256: 4, 128: 3, 64: 2}
         super().__init__()
-        self.encoder = ResNetEncoder(depth=depth_map[kwargs['image_size']])
+        self.encoder = ResNetEncoder(depth=depth_map[kwargs["image_size"]])
         self.unet = SuperResModel(**kwargs)
 
     def forward(self, x, timesteps, alt_hq, low_res=None, **kwargs):
@@ -824,18 +863,27 @@ class UnetWithBuiltInLatentEncoder(nn.Module):
 
 @register_model
 def register_unet_diffusion_latent_guide(opt_net, opt):
-    return UnetWithBuiltInLatentEncoder(**opt_net['args'])
+    return UnetWithBuiltInLatentEncoder(**opt_net["args"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     attention_ds = []
     for res in "16,8".split(","):
         attention_ds.append(128 // int(res))
-    srm = UnetWithBuiltInLatentEncoder(image_size=64, in_channels=3, model_channels=64, out_channels=3, num_res_blocks=1, attention_resolutions=attention_ds, num_heads=4,
-                        num_heads_upsample=-1, use_scale_shift_norm=True)
-    x = torch.randn(1,3,64,64)
-    alt_x = torch.randn(1,3,64,64)
-    l = torch.randn(1,3,32,32)
+    srm = UnetWithBuiltInLatentEncoder(
+        image_size=64,
+        in_channels=3,
+        model_channels=64,
+        out_channels=3,
+        num_res_blocks=1,
+        attention_resolutions=attention_ds,
+        num_heads=4,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=True,
+    )
+    x = torch.randn(1, 3, 64, 64)
+    alt_x = torch.randn(1, 3, 64, 64)
+    l = torch.randn(1, 3, 32, 32)
     ts = torch.LongTensor([555])
     y = srm(x, ts, alt_x, low_res=l)
     print(y.shape, y.mean(), y.std(), y.min(), y.max())

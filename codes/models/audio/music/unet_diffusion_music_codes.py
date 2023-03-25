@@ -63,7 +63,9 @@ class Upsample(nn.Module):
                  upsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=3, pad=1):
+    def __init__(
+        self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=3, pad=1
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -80,7 +82,9 @@ class Upsample(nn.Module):
             if dims == 1:
                 ksize = 5
                 pad = 2
-            self.conv = conv_nd(dims, self.channels, self.out_channels, ksize, padding=pad)
+            self.conv = conv_nd(
+                dims, self.channels, self.out_channels, ksize, padding=pad
+            )
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -104,7 +108,16 @@ class Downsample(nn.Module):
                  downsampling occurs in the inner-two dimensions.
     """
 
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, factor=None, ksize=None, pad=None):
+    def __init__(
+        self,
+        channels,
+        use_conv,
+        dims=2,
+        out_channels=None,
+        factor=None,
+        ksize=None,
+        pad=None,
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -123,12 +136,17 @@ class Downsample(nn.Module):
         elif dims == 2:
             stride = 2
         else:
-            stride = (1,2,2)
+            stride = (1, 2, 2)
         if factor is not None:
             stride = factor
         if use_conv:
             self.op = conv_nd(
-                dims, self.channels, self.out_channels, ksize, stride=stride, padding=pad
+                dims,
+                self.channels,
+                self.out_channels,
+                ksize,
+                stride=stride,
+                padding=pad,
             )
         else:
             assert self.channels == self.out_channels
@@ -206,7 +224,13 @@ class ResBlock(TimestepBlock):
             nn.SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding)
+                conv_nd(
+                    dims,
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size,
+                    padding=padding,
+                )
             ),
         )
 
@@ -227,9 +251,7 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, x, emb
-        )
+        return checkpoint(self._forward, x, emb)
 
     def _forward(self, x, emb):
         if self.updown:
@@ -323,7 +345,7 @@ def count_flops_attn(model, _x, y):
     # We perform two matmuls with the same number of ops.
     # The first computes the weight matrix, the second computes
     # the combination of the value vectors.
-    matmul_ops = 2 * b * (num_spatial ** 2) * c
+    matmul_ops = 2 * b * (num_spatial**2) * c
     model.total_ops += th.DoubleTensor([matmul_ops])
 
 
@@ -352,7 +374,9 @@ class QKVAttentionLegacy(nn.Module):
             "bct,bcs->bts", q * scale, k * scale
         )  # More stable with f16 than dividing afterwards
         if rel_pos is not None:
-            weight = rel_pos(weight.reshape(bs, self.n_heads, weight.shape[-2], weight.shape[-1])).reshape(bs * self.n_heads, weight.shape[-2], weight.shape[-1])
+            weight = rel_pos(
+                weight.reshape(bs, self.n_heads, weight.shape[-2], weight.shape[-1])
+            ).reshape(bs * self.n_heads, weight.shape[-2], weight.shape[-1])
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         if mask is not None:
             # The proper way to do this is to mask before the softmax using -inf, but that doesn't work properly on CPUs.
@@ -460,7 +484,7 @@ class UNetMusicModel(nn.Module):
         resblock_updown=False,
         use_new_attention_order=False,
         use_raw_y_as_embedding=False,
-        unconditioned_percentage=.1,  # This implements a mechanism similar to what is used in classifier-free training.
+        unconditioned_percentage=0.1,  # This implements a mechanism similar to what is used in classifier-free training.
     ):
         super().__init__()
 
@@ -493,44 +517,46 @@ class UNetMusicModel(nn.Module):
         if self.ar_prior:
             self.ar_input = mbnb.nn.Linear(input_vec_dim, model_channels)
             self.ar_prior_intg = Encoder(
-                    dim=model_channels,
-                    depth=4,
-                    heads=num_heads,
-                    ff_dropout=dropout,
-                    attn_dropout=dropout,
-                    use_rmsnorm=True,
-                    ff_glu=True,
-                    rotary_pos_emb=True,
-                    zero_init_branch_output=True,
-                    ff_mult=1,
-                )
+                dim=model_channels,
+                depth=4,
+                heads=num_heads,
+                ff_dropout=dropout,
+                attn_dropout=dropout,
+                use_rmsnorm=True,
+                ff_glu=True,
+                rotary_pos_emb=True,
+                zero_init_branch_output=True,
+                ff_mult=1,
+            )
         else:
             self.input_converter = mbnb.nn.Linear(input_vec_dim, model_channels)
             self.code_converter = Encoder(
-                        dim=model_channels,
-                        depth=4,
-                        heads=num_heads,
-                        ff_dropout=dropout,
-                        attn_dropout=dropout,
-                        use_rmsnorm=True,
-                        ff_glu=True,
-                        rotary_pos_emb=True,
-                        zero_init_branch_output=True,
-                        ff_mult=1,
-                    )
-        self.unconditioned_embedding = nn.Parameter(torch.randn(1,1,model_channels))
+                dim=model_channels,
+                depth=4,
+                heads=num_heads,
+                ff_dropout=dropout,
+                attn_dropout=dropout,
+                use_rmsnorm=True,
+                ff_glu=True,
+                rotary_pos_emb=True,
+                zero_init_branch_output=True,
+                ff_mult=1,
+            )
+        self.unconditioned_embedding = nn.Parameter(torch.randn(1, 1, model_channels))
         self.x_processor = conv_nd(dims, in_channels, model_channels, 3, padding=1)
 
         if self.num_classes is not None:
             # nn.Embedding
             self.label_emb = mbnb.nn.Embedding(num_classes, time_embed_dim)
         self.use_raw_y_as_embedding = use_raw_y_as_embedding
-        assert not ((self.num_classes is not None) and use_raw_y_as_embedding)  # These are mutually-exclusive.
+        assert not (
+            (self.num_classes is not None) and use_raw_y_as_embedding
+        )  # These are mutually-exclusive.
 
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, model_channels*2, model_channels, 1, padding=0)
+                    conv_nd(dims, model_channels * 2, model_channels, 1, padding=0)
                 )
             ]
         )
@@ -666,27 +692,46 @@ class UNetMusicModel(nn.Module):
         if cm != 0:
             pc = (cm - x.shape[-1]) / x.shape[-1]
             x = F.pad(x, (0, cm - x.shape[-1]))
-            y = F.pad(y.permute(0,2,1), (0, int(pc * y.shape[-1]))).permute(0,2,1)
+            y = F.pad(y.permute(0, 2, 1), (0, int(pc * y.shape[-1]))).permute(0, 2, 1)
 
         unused_params = []
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
 
         if conditioning_free:
-            expanded_code_emb = self.unconditioned_embedding.repeat(x.shape[0], x.shape[-1], 1).permute(0,2,1)
+            expanded_code_emb = self.unconditioned_embedding.repeat(
+                x.shape[0], x.shape[-1], 1
+            ).permute(0, 2, 1)
             if self.ar_prior:
-                unused_params.extend(list(self.ar_input.parameters()) + list(self.ar_prior_intg.parameters()))
+                unused_params.extend(
+                    list(self.ar_input.parameters())
+                    + list(self.ar_prior_intg.parameters())
+                )
             else:
-                unused_params.extend(list(self.input_converter.parameters()) + list(self.code_converter.parameters()))
+                unused_params.extend(
+                    list(self.input_converter.parameters())
+                    + list(self.code_converter.parameters())
+                )
         else:
             code_emb = self.ar_input(y) if self.ar_prior else self.input_converter(y)
             if self.training and self.unconditioned_percentage > 0:
-                unconditioned_batches = torch.rand((code_emb.shape[0], 1, 1),
-                                                   device=code_emb.device) < self.unconditioned_percentage
-                code_emb = torch.where(unconditioned_batches, self.unconditioned_embedding.repeat(y.shape[0], 1, 1),
-                                       code_emb)
-            code_emb = self.ar_prior_intg(code_emb) if self.ar_prior else self.code_converter(code_emb)
-            expanded_code_emb = F.interpolate(code_emb.permute(0,2,1), size=x.shape[-1], mode='nearest')
+                unconditioned_batches = (
+                    torch.rand((code_emb.shape[0], 1, 1), device=code_emb.device)
+                    < self.unconditioned_percentage
+                )
+                code_emb = torch.where(
+                    unconditioned_batches,
+                    self.unconditioned_embedding.repeat(y.shape[0], 1, 1),
+                    code_emb,
+                )
+            code_emb = (
+                self.ar_prior_intg(code_emb)
+                if self.ar_prior
+                else self.code_converter(code_emb)
+            )
+            expanded_code_emb = F.interpolate(
+                code_emb.permute(0, 2, 1), size=x.shape[-1], mode="nearest"
+            )
 
         h = x.type(self.dtype)
         expanded_code_emb = expanded_code_emb.type(self.dtype)
@@ -720,7 +765,13 @@ class UNetMusicModelWithQuantizer(nn.Module):
         self.internal_step = 0
         self.freeze_quantizer_until = freeze_quantizer_until
         self.diff = UNetMusicModel(**kwargs)
-        self.m2v = MusicQuantizer(inp_channels=256, inner_dim=[1024,1024,512], codevector_dim=1024, codebook_size=512, codebook_groups=2)
+        self.m2v = MusicQuantizer(
+            inp_channels=256,
+            inner_dim=[1024, 1024, 512],
+            codevector_dim=1024,
+            codebook_size=512,
+            codebook_groups=2,
+        )
         self.m2v.quantizer.temperature = self.m2v.min_gumbel_temperature
         del self.m2v.up
 
@@ -728,15 +779,24 @@ class UNetMusicModelWithQuantizer(nn.Module):
         self.internal_step = step
         qstep = max(0, self.internal_step - self.freeze_quantizer_until)
         self.m2v.quantizer.temperature = max(
-                    self.m2v.max_gumbel_temperature * self.m2v.gumbel_temperature_decay**qstep,
-                    self.m2v.min_gumbel_temperature,
-                )
+            self.m2v.max_gumbel_temperature
+            * self.m2v.gumbel_temperature_decay**qstep,
+            self.m2v.min_gumbel_temperature,
+        )
 
-    def forward(self, x, timesteps, truth_mel, disable_diversity=False, conditioning_input=None, conditioning_free=False):
+    def forward(
+        self,
+        x,
+        timesteps,
+        truth_mel,
+        disable_diversity=False,
+        conditioning_input=None,
+        conditioning_free=False,
+    ):
         quant_grad_enabled = self.internal_step > self.freeze_quantizer_until
         with torch.set_grad_enabled(quant_grad_enabled):
             proj, diversity_loss = self.m2v(truth_mel, return_decoder_latent=True)
-            proj = proj.permute(0,2,1)
+            proj = proj.permute(0, 2, 1)
 
         # Make sure this does not cause issues in DDP by explicitly using the parameters for nothing.
         if not quant_grad_enabled:
@@ -753,7 +813,7 @@ class UNetMusicModelWithQuantizer(nn.Module):
 
     def get_debug_values(self, step, __):
         if self.m2v.total_codes > 0:
-            return {'histogram_codes': self.m2v.codes[:self.m2v.total_codes]}
+            return {"histogram_codes": self.m2v.codes[: self.m2v.total_codes]}
         else:
             return {}
 
@@ -773,20 +833,30 @@ class UNetMusicModelARPrior(nn.Module):
             for p in self.diff.parameters():
                 p.DO_NOT_TRAIN = True
                 p.requires_grad = False
-            for p in list(self.diff.ar_prior_intg.parameters()) + list(self.diff.ar_input.parameters()):
+            for p in list(self.diff.ar_prior_intg.parameters()) + list(
+                self.diff.ar_input.parameters()
+            ):
                 del p.DO_NOT_TRAIN
                 p.requires_grad = True
 
     def get_grad_norm_parameter_groups(self):
         groups = {
-            'input_blocks': list(self.diff.input_blocks.parameters()),
-            'output_blocks': list(self.diff.output_blocks.parameters()),
-            'ar_prior_intg': list(self.diff.ar_prior_intg.parameters()),
-            'time_embed': list(self.diff.time_embed.parameters()),
+            "input_blocks": list(self.diff.input_blocks.parameters()),
+            "output_blocks": list(self.diff.output_blocks.parameters()),
+            "ar_prior_intg": list(self.diff.ar_prior_intg.parameters()),
+            "time_embed": list(self.diff.time_embed.parameters()),
         }
         return groups
 
-    def forward(self, x, timesteps, truth_mel, disable_diversity=False, conditioning_input=None, conditioning_free=False):
+    def forward(
+        self,
+        x,
+        timesteps,
+        truth_mel,
+        disable_diversity=False,
+        conditioning_input=None,
+        conditioning_free=False,
+    ):
         with torch.no_grad():
             prior = self.ar(truth_mel, conditioning_input, return_latent=True)
 
@@ -796,32 +866,48 @@ class UNetMusicModelARPrior(nn.Module):
 
 @register_model
 def register_unet_diffusion_music_codes(opt_net, opt):
-    return UNetMusicModelWithQuantizer(**opt_net['args'])
+    return UNetMusicModelWithQuantizer(**opt_net["args"])
+
 
 @register_model
 def register_unet_diffusion_music_ar_prior(opt_net, opt):
-    return UNetMusicModelARPrior(**opt_net['args'])
+    return UNetMusicModelARPrior(**opt_net["args"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     clip = torch.randn(2, 256, 300)
     cond = torch.randn(2, 256, 300)
     ts = torch.LongTensor([600, 600])
-    model = UNetMusicModelARPrior(in_channels=256, out_channels=512, model_channels=640, num_res_blocks=3, input_vec_dim=512,
-                                  attention_resolutions=(2,4), channel_mult=(1,2,3), dims=1,
-                                  use_scale_shift_norm=True, dropout=.1, num_heads=8, unconditioned_percentage=.4, freeze_unet=True)
+    model = UNetMusicModelARPrior(
+        in_channels=256,
+        out_channels=512,
+        model_channels=640,
+        num_res_blocks=3,
+        input_vec_dim=512,
+        attention_resolutions=(2, 4),
+        channel_mult=(1, 2, 3),
+        dims=1,
+        use_scale_shift_norm=True,
+        dropout=0.1,
+        num_heads=8,
+        unconditioned_percentage=0.4,
+        freeze_unet=True,
+    )
     print_network(model)
     model.get_grad_norm_parameter_groups()
 
-    ar_weights = torch.load('D:\\dlas\\experiments\\train_music_gpt\\models\\44500_generator_ema.pth')
+    ar_weights = torch.load(
+        "D:\\dlas\\experiments\\train_music_gpt\\models\\44500_generator_ema.pth"
+    )
     model.ar.load_state_dict(ar_weights, strict=True)
-    diff_weights = torch.load('X:\\dlas\\experiments\\train_music_diffusion_unet_music\\models\\55500_generator_ema.pth')
+    diff_weights = torch.load(
+        "X:\\dlas\\experiments\\train_music_diffusion_unet_music\\models\\55500_generator_ema.pth"
+    )
     pruned_diff_weights = {}
-    for k,v in diff_weights.items():
-        if k.startswith('diff.'):
-            pruned_diff_weights[k.replace('diff.', '')] = v
+    for k, v in diff_weights.items():
+        if k.startswith("diff."):
+            pruned_diff_weights[k.replace("diff.", "")] = v
     model.diff.load_state_dict(pruned_diff_weights, strict=False)
-    torch.save(model.state_dict(), 'sample.pth')
+    torch.save(model.state_dict(), "sample.pth")
 
     model(clip, ts, cond, cond)
-

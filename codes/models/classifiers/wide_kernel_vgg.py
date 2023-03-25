@@ -5,6 +5,7 @@ from trainer.networks import register_model
 from utils.util import opt_get
 import maybe_bnb as mbnb
 
+
 class WideKernelVgg(nn.Module):
     def __init__(self, nf=64, num_classes=2):
         super().__init__()
@@ -51,16 +52,16 @@ class WideKernelVgg(nn.Module):
             nn.Flatten(),
             mbnb.nn.Linear(nf * 8 * 4 * 2, 100),
             nn.ReLU(),
-            mbnb.nn.Linear(100, num_classes)
+            mbnb.nn.Linear(100, num_classes),
         )
 
         # These normalization constants should be derived experimentally.
-        self.log_fft_mean = torch.tensor([-3.5184, -4.071]).view(1,1,1,2)
-        self.log_fft_std = torch.tensor([3.1660, 3.8042]).view(1,1,1,2)
+        self.log_fft_mean = torch.tensor([-3.5184, -4.071]).view(1, 1, 1, 2)
+        self.log_fft_std = torch.tensor([3.1660, 3.8042]).view(1, 1, 1, 2)
 
     def forward(self, x):
-        b,c,h,w = x.shape
-        x_c = x.view(c*b, h, w)
+        b, c, h, w = x.shape
+        x_c = x.view(c * b, h, w)
         x_c = torch.view_as_real(torch.fft.rfft(x_c))
 
         # Log-normalize spectrogram
@@ -76,11 +77,10 @@ class WideKernelVgg(nn.Module):
 
 @register_model
 def register_wide_kernel_vgg(opt_net, opt):
-    """ return a ResNet 18 object
-    """
-    return WideKernelVgg(**opt_get(opt_net, ['kwargs'], {}))
+    """return a ResNet 18 object"""
+    return WideKernelVgg(**opt_get(opt_net, ["kwargs"], {}))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     vgg = WideKernelVgg()
-    vgg(torch.randn(1,3,256,256))
+    vgg(torch.randn(1, 3, 256, 256))

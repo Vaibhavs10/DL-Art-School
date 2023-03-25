@@ -7,21 +7,23 @@ from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 
 
-''' 
+""" 
 Helper function for scripts that iterate over large sets of files. Defines command-line arguments
 for operating over a large set of files, then handles setting up a worker queue system to operate
 on those files. You need to provide your own process_file_fn.
 
 process_file_fn expected signature:
  (path, output_path)
-'''
+"""
+
+
 def do_to_files(process_file_fn):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path')
-    parser.add_argument('--glob')
-    parser.add_argument('--out')
-    parser.add_argument('--resume')
-    parser.add_argument('--num_workers')
+    parser.add_argument("--path")
+    parser.add_argument("--glob")
+    parser.add_argument("--out")
+    parser.add_argument("--resume")
+    parser.add_argument("--num_workers")
 
     args = parser.parse_args()
     src = args.path

@@ -1,4 +1,4 @@
-# AGPL: a notification must be added stating that changes have been made to that file. 
+# AGPL: a notification must be added stating that changes have been made to that file.
 import importlib
 import logging
 import os
@@ -7,12 +7,14 @@ import sys
 from collections import OrderedDict
 from inspect import isfunction, getmembers, signature
 
-logger = logging.getLogger('base')
+logger = logging.getLogger("base")
 
 
 class RegisteredModelNameError(Exception):
     def __init__(self, name_error):
-        super().__init__(f'Registered DLAS modules must start with `register_`. Incorrect registration: {name_error}')
+        super().__init__(
+            f"Registered DLAS modules must start with `register_`. Incorrect registration: {name_error}"
+        )
 
 
 # Decorator that allows API clients to show DLAS how to build a nn.Module from an opt dict.
@@ -32,18 +34,18 @@ def register_model(func):
     return func
 
 
-def find_registered_model_fns(base_path='models'):
+def find_registered_model_fns(base_path="models"):
     found_fns = {}
     module_iter = pkgutil.walk_packages([base_path])
     for mod in module_iter:
         if os.path.join(os.getcwd(), base_path) not in mod.module_finder.path:
-            continue   # I have no idea why this is necessary - I think it's a bug in the latest PyWindows release.
+            continue  # I have no idea why this is necessary - I think it's a bug in the latest PyWindows release.
         if mod.ispkg:
-            EXCLUSION_LIST = ['flownet2']
+            EXCLUSION_LIST = ["flownet2"]
             if mod.name not in EXCLUSION_LIST:
-                found_fns.update(find_registered_model_fns(f'{base_path}/{mod.name}'))
+                found_fns.update(find_registered_model_fns(f"{base_path}/{mod.name}"))
         else:
-            mod_name = f'{base_path}/{mod.name}'.replace('/', '.')
+            mod_name = f"{base_path}/{mod.name}".replace("/", ".")
             importlib.import_module(mod_name)
             for mod_fn in getmembers(sys.modules[mod_name], isfunction):
                 if hasattr(mod_fn[1], "_dlas_registered_model"):
@@ -53,18 +55,20 @@ def find_registered_model_fns(base_path='models'):
 
 class CreateModelError(Exception):
     def __init__(self, name, available):
-        super().__init__(f'Could not find the specified model name: {name}. Tip: If your model is in a'
-                         f' subdirectory, that directory must contain an __init__.py to be scanned. Available models:'
-                         f'{available}')
+        super().__init__(
+            f"Could not find the specified model name: {name}. Tip: If your model is in a"
+            f" subdirectory, that directory must contain an __init__.py to be scanned. Available models:"
+            f"{available}"
+        )
 
 
 def create_model(opt, opt_net, other_nets=None):
-    which_model = opt_net['which_model']
+    which_model = opt_net["which_model"]
     # For backwards compatibility.
     if not which_model:
-        which_model = opt_net['which_model_G']
+        which_model = opt_net["which_model_G"]
     if not which_model:
-        which_model = opt_net['which_model_D']
+        which_model = opt_net["which_model_D"]
     registered_fns = find_registered_model_fns()
     if which_model not in registered_fns.keys():
         raise CreateModelError(which_model, list(registered_fns.keys()))
