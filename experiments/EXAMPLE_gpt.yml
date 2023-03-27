@@ -1,21 +1,21 @@
-name: CHANGEME_your_experiment_name
+name: VB-lj-speech
 model: extensibletrainer
 scale: 1
 gpu_ids: [0] # <-- unless you have multiple gpus, use this
 start_step: 0 # -1 causes 0.pth to be saved!
 checkpointing_enabled: true  # <-- Gradient checkpointing. Enable for huge GPU memory savings. Disable for distributed training.
-fp16: false # TODO: why does enabling this with 8bit slow down perf??
-use_8bit: true
-wandb: false  # <-- enable to log to wandb. tensorboard logging is always enabled.
-use_tb_logger: true
+fp16: true # TODO: why does enabling this with 8bit slow down perf??
+use_8bit: false
+wandb: true  # <-- enable to log to wandb. tensorboard logging is always enabled.
+use_tb_logger: false
 
 datasets:
   train:
-    name: CHANGEME_training_dataset_name
+    name: LJSpeech
     n_workers: 8 # idk what this does
-    batch_size: 128 # This leads to ~16GB of vram usage on my 3090.
+    batch_size: 256 # This leads to ~16GB of vram usage on my 3090.
     mode: paired_voice_audio
-    path: CHANGEME_path_to_training_dataset
+    path: /home/vaibhav_huggingface_co/LJSpeech-1.1/metadata_fl.csv 
     fetcher_mode: ['lj'] # CHANGEME if your dataset isn't in LJSpeech format
     phase: train
     max_wav_length: 255995
@@ -27,11 +27,11 @@ datasets:
     use_bpe_tokenizer: True
     load_aligned_codes: False
   val:
-    name: CHANGEME_validation_dataset_name
+    name: LJSpeech
     n_workers: 1
     batch_size: 64 # this could be higher probably
     mode: paired_voice_audio
-    path: CHANGEME_path_to_validation_dataset
+    path: /home/vaibhav_huggingface_co/LJSpeech-1.1/val_fl.csv
     fetcher_mode: ['lj']
     phase: val # might be broken idk
     max_wav_length: 255995
@@ -139,7 +139,7 @@ eval:
 
 logger:
   print_freq: 100 # TODO: set this to epoch size
-  save_checkpoint_freq: 500 # CHANGEME: especially you should increase this it's really slow
+  save_checkpoint_freq: 5000 # CHANGEME: especially you should increase this it's really slow
   visuals: [gen, mel] #TODO: figure this out
   visual_debug_rate: 500
   is_mel_spectrogram: true
@@ -154,7 +154,7 @@ upgrades:
   # For Colab use 1 or 2 for gDrive and 5 for instance drive
   # 1 == Leave last saved checkpoint + last saved state (about 6.8 GB).
   # 2 == Leave last 2 saved checkpoints + last saved states (about 2 *~ 6.8 GB =~ 13.6 GB).
-  number_of_checkpoints_to_save: 0
+  number_of_checkpoints_to_save: 2
   # Variable: number_of_states_to_save
   # Description: Define how many states should be saved on disk (1 state =~ 3.4 GB)
   # if disable_state_saving is set as true this option will be inactive
@@ -164,4 +164,4 @@ upgrades:
   # For Colab use 1 or 2 for gDrive and 5 for instance drive
   # 1 == Leave last saved state (about 3.4 GB).
   # 2 == Leave last 2 saved states (about 2 *~ 3.4 GB =~ 6.8 GB).
-  number_of_states_to_save: 0
+  number_of_states_to_save: 2
